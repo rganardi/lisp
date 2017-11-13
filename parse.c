@@ -113,8 +113,8 @@ int repl() {
 		fprintf(stderr, "can't initialize level\n");
 	}
 
-	for (i = 0; i == MAX_TOKENS; i++) {
-		tok[i] = NULL;
+	while (i < MAX_TOKENS) {
+		tok[i++] = NULL;
 	}
 	if (!(buf = calloc(BUFFER_SIZE, sizeof(buf)))) {
 		fprintf(stderr, "can't initialize buf\n");
