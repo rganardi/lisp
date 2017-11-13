@@ -169,8 +169,3 @@ int repl() {
 	free(buf);
 	return 0;
 }
-
-int main () {
-	repl();
-	return 0;
-}

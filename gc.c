@@ -147,22 +147,3 @@ void freeVM(struct VM *vm) {
 	gc(vm);
 	free(vm);
 }
-/*
-int main() {
-	struct VM *vm;
-	int count = 0;
-	vm = newVM();
-	while (1) {
-		count++;
-		printf("push %d\n", count);
-		pushInt(vm, count);
-		pushInt(vm, count);
-		printf("push pair\n");
-		pushPair(vm);
-		printf("pop %d\n", pop(vm)->type);
-		sleep(1);
-	}
-	free(vm);
-	return 0;
-}
-*/
