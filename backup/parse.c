@@ -9,7 +9,7 @@
 
 enum ObjectType {
 	OBJ_PAIR,
-	OBJ_INT
+	OBJ_ATOM
 };
 
 struct Pair {
@@ -22,11 +22,16 @@ struct Object {
 
 	union {
 		/* OBJ_INT */
-		int i;
+		char *atom;
 
 		/* OBJ_PAIR */
 		struct Pair p;
 	};
+};
+
+struct Lambda {
+	char **args;
+	char *body;
 };
 
 static int read_line(int fd, char *buf, size_t bufsiz) {
@@ -49,6 +54,8 @@ static int read_line(int fd, char *buf, size_t bufsiz) {
 
 static int tokenize(char *str, char **tok) {
 	int i = 0;
+
+#if DEBUG
 	char *sexp_begin = NULL;
 	char *sexp_end = NULL;
 
@@ -59,7 +66,7 @@ static int tokenize(char *str, char **tok) {
 		fprintf(stderr, "it's not a sexp\n");
 		return 1;
 	}
-#if DEBUG
+
 	printf("begin %.2s ... %.2s end\n", sexp_begin++, --sexp_end);
 #endif
 	tok[i] = strtok(str, " \t");
@@ -100,10 +107,36 @@ static int walk(char *str, int *level) {
 	return 0;
 }
 
+static int parse(char *str) {
+	char *tok[MAX_TOKENS];
+	int i = 0;
+
+#if DEBUG
+	printf("tokenizing %s\n", str);
+#endif
+
+	while (i < MAX_TOKENS) {
+		tok[i++] = NULL;
+	}
+
+	if (tokenize(str, tok)) {
+		return 1;
+	}
+
+	for (i = 0; i < MAX_TOKENS ; i++) {
+		if (!(tok[i])) {
+			break;
+		}
+#if DEBUG
+		printf("token: %s\n", tok[i]);
+#endif
+	}
+	return 0;
+}
+
 int repl() {
 	char *buf;
 	char *str;
-	char *tok[MAX_TOKENS];
 	int i = 0;
 	int err = 0;
 	int *level;
@@ -113,9 +146,6 @@ int repl() {
 		fprintf(stderr, "can't initialize level\n");
 	}
 
-	while (i < MAX_TOKENS) {
-		tok[i++] = NULL;
-	}
 	if (!(buf = calloc(BUFFER_SIZE, sizeof(buf)))) {
 		fprintf(stderr, "can't initialize buf\n");
 		exit(1);
@@ -147,19 +177,7 @@ int repl() {
 		}
 
 		if (*level == 0 && i > 0) {
-#if DEBUG
-			printf("tokenizing %s\n", str);
-#endif
-			tokenize(str, tok);
-			for (i = 0; i < MAX_TOKENS ; i++) {
-				if (!(tok[i])) {
-					break;
-				}
-#if DEBUG
-				printf("token: %s\n", tok[i]);
-#endif
-			}
-			tok[0] = NULL;
+			parse(str);
 			free(str);
 			str = calloc(BUFFER_SIZE, sizeof(str));
 		}
