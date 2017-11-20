@@ -9,6 +9,27 @@
 #define BUFFER_SIZE 256
 #define SEXP_BEGIN "("
 #define SEXP_END ")"
+#define SEXP_DELIM " \t"
+
+enum s_type {
+	OBJ_NULL,	/* scheme '() */
+	OBJ_ATOM,
+	OBJ_PAIR
+};
+
+struct Sexp {
+	enum s_type type;
+	union {
+		char *atom;
+		struct Sexp *pair;
+	};
+	struct Sexp *next;
+};
+
+static const struct Sexp s_null = {
+	.type = OBJ_NULL,
+	.next = NULL
+};
 
 int match(char c, const char *bytes) {
 	const char *p = NULL;
@@ -116,7 +137,7 @@ static int sexp_end(char *str, char **end) {
 	save = cp;
 
 	do {
-		p = tok(cp, " \t");
+		p = tok(cp, SEXP_DELIM);
 		level += count_open(cp);
 		level -= count_close(cp);
 
@@ -137,21 +158,131 @@ static int sexp_end(char *str, char **end) {
 	return 1;
 }
 
-int parse(char *str) {
+int check_if_sexp(char *str) {
+	while (match(*str, SEXP_DELIM)) {
+		str++;
+	}
+	if (match(*str, SEXP_BEGIN)) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+int print_sexp(struct Sexp *s) {
+	struct Sexp *p = s;
+	while (p != NULL) {
+		switch (p->type) {
+			case OBJ_NULL:
+				printf("(null)");
+				break;
+			case OBJ_ATOM:
+				printf("{%s}", p->atom);
+				break;
+			case OBJ_PAIR:
+				printf("(");
+				print_sexp(p->pair);
+				printf(")");
+				break;
+			default:
+				printf("unknown sexp type %d\n", p->type);
+				return 1;
+		}
+
+		p = p->next;
+		//printf("sleep print\n");
+		//sleep(1);
+	}
+
+	return 0;
+}
+
+int append_sexp(struct Sexp **dest, struct Sexp *src) {
+	struct Sexp *dst = *dest;
+	struct Sexp *p = dst;
+
+	printf("appending sexps\n");
+	print_sexp(src);
+	printf("\nto\n");
+	print_sexp(dst);
+	printf("\n");
+
+
+	if (p->type == OBJ_NULL) {
+		src->next = dst;
+		dst = src;
+	} else {
+		while ((p->next)->type != OBJ_NULL) {
+			p = p->next;
+		}
+
+		src->next = p->next;
+		p->next = src;
+	}
+
+	printf("after append\n");
+	print_sexp(dst);
+	printf("exit append\n");
+	*dest = dst;
+
+	return 0;
+}
+
+int parse(char *str, struct Sexp *s) {
+//int parse(char *str, struct Sexp **tree) {
+	//struct Sexp *s = *tree;
 	char *end = NULL;
-	char *t = NULL;
+	//char *t = NULL;
+	int err = -1;
+	struct Sexp c;
 
 	printf("parsing %s\n", str);
 
-	sexp_end(str, &end);
-	printf("begin %s .. %c end\n", str, *(end - 3));
+	err = sexp_end(str, &end);
+	if (err) {
+		fprintf(stderr, "can't parse the sexp\n%s", str);
+	}
 
+	while (match(*str, SEXP_DELIM)) {
+		str++;	/* eat whitespace */
+	}
+
+	if (check_if_sexp(str)) {
+		str++;
+		/* parse the sexp one level down */
+	} else {
+		/* append the current atom to the sexp */
+		c.type = OBJ_ATOM;
+		c.atom = str;
+		c.next = NULL;
+		//c.next = s;
+		append_sexp(&s, &c);
+		printf("in parse\n");
+		print_sexp(s);
+		//*tree = s;
+	}
+
+	printf("begin %s .. %c end\n", str, *(end - 3));
+	printf("again in parse\n");
+	print_sexp(s);
+
+	/*
 	do {
-		t = tok(str, " \t");
+		t = tok(str, SEXP_DELIM);
 		printf("tok: %s\n", str);
 		str = t;
 	} while (*t != '\0');
+	*/
 
+	printf("done parse\n");
+
+	return 0;
+}
+
+int eval(struct Sexp *s) {
+	printf("in eval\n");
+	print_sexp(s);
+	printf("exit eval\n");
 	return 0;
 }
 
@@ -202,29 +333,33 @@ size_t append_string(char **dest, const char *src) {
 
 int repl() {
 	char buf[BUFFER_SIZE];
-	char *str;
+	char *str = NULL;
 #if PARSE
 	char *p = NULL;
 	int i = 0;
 #endif
-	//int err = 0;
-	int *level;
+	int *level = NULL;
+	struct Sexp *input = NULL;
 
 	if (!(level = calloc(1, sizeof(int)))) {
 		fprintf(stderr, "can't initialize level\n");
 	}
 
-	//if (!(buf = calloc(BUFFER_SIZE, sizeof(buf)))) {
-	//	fprintf(stderr, "can't initialize buf\n");
-	//	exit(1);
-	//}
 	if (!(str = malloc(sizeof(char)))) {
 		fprintf(stderr, "can't initialize str\n");
 		exit(1);
 	}
 
-	*str = '\0';
+	if (!(input = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "can't initialize input tree\n");
+		exit(1);
+	}
+
 	*level = 0;
+	*str = '\0';
+	//input->type = OBJ_NULL;
+	//input->next = NULL;
+	*input = s_null;
 
 	while (read_line(STDIN_FILENO, buf, BUFFER_SIZE) == 0) {
 #if VDEBUG
@@ -245,16 +380,31 @@ int repl() {
 #else
 		if (0) {
 #endif
-			parse(str);
+			parse(str, input);
+			eval(input);
 			free(str);
-			str = malloc(sizeof(char));
+			//free(input);
+
+			//if (!(input = malloc(sizeof(struct Sexp)))) {
+			//	fprintf(stderr, "can't initialize input tree\n");
+			//	exit(1);
+			//}
+
+			if (!(str = malloc(sizeof(char)))) {
+				fprintf(stderr, "can't initialize str\n");
+				exit(1);
+			}
+
 			*str = '\0';
+			//input->type = OBJ_NULL;
+			//input->next = NULL;
+			*input = s_null;
 		}
 	}
 
 	free(str);
 	free(level);
-	//free(buf);
+	//free(input);
 	return 0;
 }
 
