@@ -4,6 +4,8 @@
 #include <bsd/string.h>
 #include <stdlib.h>
 
+//#include "strlcat.c"
+
 #define BUFFER_SIZE 256
 #define SEXP_BEGIN "("
 #define SEXP_END ")"
@@ -77,7 +79,9 @@ static int count_close(char *str) {
 	int i = 0;
 	char *c = &str[strlen(str) - 1];
 
+#ifdef VDEBUG
 	printf("count from %s ", c);
+#endif
 
 	while (match(*c, SEXP_END)) {
 		i++;
@@ -104,7 +108,9 @@ static int sexp_end(char *str, char **end) {
 	char *cp = NULL;
 	char *save = NULL;
 
+#ifdef PARSE
 	printf("sexp_end(%s)\n", str);
+#endif
 
 	cp = strdup(str);
 	save = cp;
@@ -114,10 +120,12 @@ static int sexp_end(char *str, char **end) {
 		level += count_open(cp);
 		level -= count_close(cp);
 
+#ifdef DEBUG
 		printf("{%lu}%s %d\n", strlen(cp), cp, level);
-		if (level <= 0) {
+#endif
+		if (level < 1) {
 			free(save);
-			*end = p + level;
+			*end = (p + level);
 			return 0;
 		}
 
@@ -165,36 +173,40 @@ static int read_line(int fd, char *buf, size_t bufsiz) {
 	return 0;
 }
 
-size_t append_string(char *dst, char *src) {
-	//TODO: there's some buffer overflow thing
-	//try inputting
-	//(define a
-	//(lambda (x)
-	//x
-	//))
-	size_t n = strlen(src) + 1;
-	size_t i = 0;
+size_t append_string(char **dest, const char *src) {
+	char *dst = *dest;
+	size_t n = strlen(dst) + strlen(src) + 1;
 
-	if (!(realloc(dst, strlen(dst) + n))) {
+#ifdef VDEBUG
+	printf("pre strlen(dst) %lu, strlen(src) %lu\n", strlen(dst), strlen(src));
+#endif
+
+	dst = realloc(dst, n);
+	if (!dst) {
 		fprintf(stderr, "can't resize dst\n");
 	}
 
-	i = strlcat(dst, src, strlen(dst) + n);
-
-	if (i >= strlen(dst)) {
+	if (strlcat(dst, src, n) >= n) {
 		fprintf(stderr, "cat failed\n");
 	}
 
-	return i;
+
+#ifdef VDEBUG
+	printf("post strlen(dst) %lu, strlen(src) %lu n %lu \n", strlen(dst), strlen(src), n);
+#endif
+	*dest = dst;
+	return n;
 }
 
 
 
 int repl() {
-	char *buf;
+	char buf[BUFFER_SIZE];
 	char *str;
+#if PARSE
 	char *p = NULL;
 	int i = 0;
+#endif
 	//int err = 0;
 	int *level;
 
@@ -202,38 +214,47 @@ int repl() {
 		fprintf(stderr, "can't initialize level\n");
 	}
 
-	if (!(buf = calloc(BUFFER_SIZE, sizeof(buf)))) {
-		fprintf(stderr, "can't initialize buf\n");
-		exit(1);
-	}
-	if (!(str = calloc(1, sizeof(str)))) {
+	//if (!(buf = calloc(BUFFER_SIZE, sizeof(buf)))) {
+	//	fprintf(stderr, "can't initialize buf\n");
+	//	exit(1);
+	//}
+	if (!(str = malloc(sizeof(char)))) {
 		fprintf(stderr, "can't initialize str\n");
 		exit(1);
 	}
+
+	*str = '\0';
 	*level = 0;
+
 	while (read_line(STDIN_FILENO, buf, BUFFER_SIZE) == 0) {
 #if VDEBUG
 		fprintf(stdout, "saved %s, read %s\n", str, buf);
-#endif
 		printf("{%lu} in buf, {%lu} in str\n", strlen(buf), strlen(str));
-		append_string(str, buf);
+#endif
+		append_string(&str, buf);
 #if DEBUG
 		printf("read %s\n", str);
 #endif
+#if PARSE
 		i = sexp_end(str, &p);
 		printf("p %s\n", p);
+#endif
 
+#if PARSE
 		if (!i) {
-		//if (0) {
+#else
+		if (0) {
+#endif
 			parse(str);
 			free(str);
-			str = calloc(BUFFER_SIZE, sizeof(str));
+			str = malloc(sizeof(char));
+			*str = '\0';
 		}
 	}
 
 	free(str);
 	free(level);
-	free(buf);
+	//free(buf);
 	return 0;
 }
 
