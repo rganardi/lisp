@@ -4,9 +4,8 @@ SRC=$(wildcard *.c)
 OBJ=${SRC:.c=.o}
 CFLAGS=-Wall\
        -lbsd\
-       -DDEBUG\
        -DPARSE\
-       #-DDEBUGCAT\
+       -DEVAL
 
 PROGNAME: ${OBJ}
 	cc ${CFLAGS} -o ${PROGNAME} ${OBJ}

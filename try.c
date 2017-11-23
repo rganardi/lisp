@@ -100,7 +100,7 @@ static int count_close(char *str) {
 	int i = 0;
 	char *c = &str[strlen(str) - 1];
 
-#ifdef VDEBUG
+#ifdef DEBUGCOUNT
 	printf("count from %s ", c);
 #endif
 
@@ -129,7 +129,7 @@ static int sexp_end(char *str, char **end) {
 	char *cp = NULL;
 	char *save = NULL;
 
-#ifdef PARSE
+#ifdef DEBUGSEXP_END
 	printf("sexp_end(%s)\n", str);
 #endif
 
@@ -141,7 +141,7 @@ static int sexp_end(char *str, char **end) {
 		level += count_open(cp);
 		level -= count_close(cp);
 
-#ifdef DEBUG
+#ifdef DEBUGSEXP_END
 		printf("{%lu}%s %d\n", strlen(cp), cp, level);
 #endif
 		if (level < 1) {
@@ -171,13 +171,14 @@ int check_if_sexp(char *str) {
 
 int print_sexp(struct Sexp *s) {
 	struct Sexp *p = s;
+	printf("(");
 	while (p != NULL) {
 		switch (p->type) {
 			case OBJ_NULL:
-				printf("(null)");
+				printf("%p (null)", p);
 				break;
 			case OBJ_ATOM:
-				printf("{%s}", p->atom);
+				printf("%p {%s}", p, p->atom);
 				break;
 			case OBJ_PAIR:
 				printf("(");
@@ -185,7 +186,7 @@ int print_sexp(struct Sexp *s) {
 				printf(")");
 				break;
 			default:
-				printf("unknown sexp type %d\n", p->type);
+				printf("%p unknown sexp type\n", p);
 				return 1;
 		}
 
@@ -193,50 +194,100 @@ int print_sexp(struct Sexp *s) {
 		//printf("sleep print\n");
 		//sleep(1);
 	}
+	printf(")");
 
 	return 0;
 }
 
-int append_sexp(struct Sexp **dest, struct Sexp *src) {
-	struct Sexp *dst = *dest;
-	struct Sexp *p = dst;
+void free_sexp(struct Sexp *s) {
+	/* free a (null) terminated Sexp */
+	struct Sexp *p = s;
+	struct Sexp *pp = s;
 
+	do {
+		pp = p;
+		p = p->next;
+
+		if ((pp)->type == OBJ_NULL) {
+			break;
+		}
+		free(pp);
+	} while (p);
+
+	return;
+}
+
+int append_sexp(struct Sexp **dst, struct Sexp *src) {
+	struct Sexp *p = *dst;
+	struct Sexp *pp = *dst;
+
+#if DEBUGAPPEND_SEXP
 	printf("appending sexps\n");
 	print_sexp(src);
 	printf("\nto\n");
-	print_sexp(dst);
+	print_sexp(*dst);
 	printf("\n");
+#endif
 
 
-	if (p->type == OBJ_NULL) {
-		src->next = dst;
-		dst = src;
+	if ((*dst)->type == OBJ_NULL) {
+#if DEBUGAPPEND_SEXP
+		printf("%p src\n", src);
+		printf("%p src->next\n", src->next);
+		printf("%p *dst\n", *dst);
+		printf("%p (*dst)->next\n", (*dst)->next);
+#endif
+
+		src->next = *dst;
+		*dst = src;
+
+#if DEBUGAPPEND_SEXP
+		printf("post\n");
+		printf("%p src\n", src);
+		printf("%p src->next\n", src->next);
+		printf("%p *dst\n", *dst);
+		printf("%p (*dst)->next\n", (*dst)->next);
+#endif
 	} else {
-		while ((p->next)->type != OBJ_NULL) {
+		while (p->type != OBJ_NULL) {
+			pp = p;
 			p = p->next;
 		}
+#if DEBUGAPPEND_SEXP
+		printf("%p src\n", src);
+		printf("%p src->next\n", src->next);
+		printf("%p pp\n", pp);
+		printf("%p pp->next\n", pp->next);
+#endif
 
-		src->next = p->next;
-		p->next = src;
+		src->next = pp->next;
+		pp->next = src;
+
+#if DEBUGAPPEND_SEXP
+		printf("post\n");
+		printf("%p src\n", src);
+		printf("%p src->next\n", src->next);
+		printf("%p pp\n", pp);
+		printf("%p pp->next\n", pp->next);
+#endif
 	}
-
-	printf("after append\n");
-	print_sexp(dst);
-	printf("exit append\n");
-	*dest = dst;
 
 	return 0;
 }
 
-int parse(char *str, struct Sexp *s) {
-//int parse(char *str, struct Sexp **tree) {
+//int parse(char *str, struct Sexp *s) {
+int parse(char *str, struct Sexp **tree) {
 	//struct Sexp *s = *tree;
 	char *end = NULL;
 	//char *t = NULL;
 	int err = -1;
-	struct Sexp c;
+	struct Sexp *c;
 
+#if DEBUGPARSE
 	printf("parsing %s\n", str);
+#endif
+
+	c = malloc(sizeof(struct Sexp));
 
 	err = sexp_end(str, &end);
 	if (err) {
@@ -249,22 +300,26 @@ int parse(char *str, struct Sexp *s) {
 
 	if (check_if_sexp(str)) {
 		str++;
+		printf("i'm here?\n");
 		/* parse the sexp one level down */
 	} else {
 		/* append the current atom to the sexp */
-		c.type = OBJ_ATOM;
-		c.atom = str;
-		c.next = NULL;
-		//c.next = s;
-		append_sexp(&s, &c);
-		printf("in parse\n");
-		print_sexp(s);
-		//*tree = s;
+		c->type = OBJ_ATOM;
+		c->atom = str;
+		c->next = NULL;
+#if DEBUGPARSE
+		printf("%p appending c\n", c);
+		printf("%p input pre parse\n", *tree);
+#endif
+		append_sexp(tree, c);
+#if DEBUGPARSE
+		printf("%p input post parse\n", *tree);
+#endif
 	}
 
+#if DEBUGPARSE
 	printf("begin %s .. %c end\n", str, *(end - 3));
-	printf("again in parse\n");
-	print_sexp(s);
+#endif
 
 	/*
 	do {
@@ -274,7 +329,9 @@ int parse(char *str, struct Sexp *s) {
 	} while (*t != '\0');
 	*/
 
+#if DEBUGPARSE
 	printf("done parse\n");
+#endif
 
 	return 0;
 }
@@ -308,7 +365,7 @@ size_t append_string(char **dest, const char *src) {
 	char *dst = *dest;
 	size_t n = strlen(dst) + strlen(src) + 1;
 
-#ifdef VDEBUG
+#ifdef DEBUGAPPEND
 	printf("pre strlen(dst) %lu, strlen(src) %lu\n", strlen(dst), strlen(src));
 #endif
 
@@ -322,7 +379,7 @@ size_t append_string(char **dest, const char *src) {
 	}
 
 
-#ifdef VDEBUG
+#ifdef DEBUGAPPEND
 	printf("post strlen(dst) %lu, strlen(src) %lu n %lu \n", strlen(dst), strlen(src), n);
 #endif
 	*dest = dst;
@@ -334,8 +391,10 @@ size_t append_string(char **dest, const char *src) {
 int repl() {
 	char buf[BUFFER_SIZE];
 	char *str = NULL;
-#if PARSE
+#if DEBUGPARSE
 	char *p = NULL;
+#endif
+#if PARSE || DEBUGPARSE
 	int i = 0;
 #endif
 	int *level = NULL;
@@ -362,15 +421,15 @@ int repl() {
 	*input = s_null;
 
 	while (read_line(STDIN_FILENO, buf, BUFFER_SIZE) == 0) {
-#if VDEBUG
+#if DEBUGREAD
 		fprintf(stdout, "saved %s, read %s\n", str, buf);
 		printf("{%lu} in buf, {%lu} in str\n", strlen(buf), strlen(str));
 #endif
 		append_string(&str, buf);
-#if DEBUG
+#if DEBUGREAD
 		printf("read %s\n", str);
 #endif
-#if PARSE
+#if DEBUGPARSE
 		i = sexp_end(str, &p);
 		printf("p %s\n", p);
 #endif
@@ -380,9 +439,11 @@ int repl() {
 #else
 		if (0) {
 #endif
-			parse(str, input);
+			parse(str, &input);
+#if EVAL
 			eval(input);
-			free(str);
+#endif
+			//free(str);
 			//free(input);
 
 			//if (!(input = malloc(sizeof(struct Sexp)))) {
@@ -390,7 +451,17 @@ int repl() {
 			//	exit(1);
 			//}
 
-			if (!(str = malloc(sizeof(char)))) {
+			//if (!(str = malloc(sizeof(char)))) {
+			//	fprintf(stderr, "can't initialize str\n");
+			//	exit(1);
+			//}
+			free_sexp(input);
+
+			if (!(input = malloc(sizeof(struct Sexp)))) {
+				fprintf(stderr, "can't initialize input tree\n");
+				exit(1);
+			}
+			if (!(str = realloc(str, sizeof(char)))) {
 				fprintf(stderr, "can't initialize str\n");
 				exit(1);
 			}
