@@ -5,12 +5,14 @@ OBJ=${SRC:.c=.o}
 CFLAGS=-Wall\
        -lbsd\
        -DPARSE\
-       -DEVAL
+       -DEVAL\
+       #-DDEBUGFREE_SEXP
 
-PROGNAME: ${OBJ}
+PROGNAME: ${OBJ} tags
 	cc ${CFLAGS} -o ${PROGNAME} ${OBJ}
 
-.c.o:
+tags:
+	ctags -R src/
 
 clean:
 	rm ${PROGNAME} ${OBJ}
