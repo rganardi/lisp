@@ -1,6 +1,6 @@
 PROGNAME=lisp
 
-SRC=$(wildcard *.c)
+SRC=$(wildcard src/*.c)
 OBJ=${SRC:.c=.o}
 CFLAGS=-Wall\
        -lbsd\
