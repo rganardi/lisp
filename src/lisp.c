@@ -171,19 +171,19 @@ int check_if_sexp(char *str) {
 
 int print_sexp(struct Sexp *s) {
 	struct Sexp *p = s;
-	printf("(");
+	printf("(\n");
 	while (p != NULL) {
 		switch (p->type) {
 			case OBJ_NULL:
-				printf("%p (null)", p);
+				printf("%p (null)\n", p);
 				break;
 			case OBJ_ATOM:
-				printf("%p {%s}", p, p->atom);
+				printf("%p {%s}\n", p, p->atom);
 				break;
 			case OBJ_PAIR:
-				printf("(");
+				printf("(\n");
 				print_sexp(p->pair);
-				printf(")");
+				printf(")\n");
 				break;
 			default:
 				printf("%p unknown sexp type\n", p);
@@ -194,7 +194,7 @@ int print_sexp(struct Sexp *s) {
 		//printf("sleep print\n");
 		//sleep(1);
 	}
-	printf(")");
+	printf(")\n");
 
 	return 0;
 }
@@ -208,9 +208,9 @@ void free_sexp(struct Sexp *s) {
 		pp = p;
 		p = p->next;
 
-		if ((pp)->type == OBJ_NULL) {
-			break;
-		}
+#if DEBUGFREE_SEXP
+		printf("freeing %p %s\n", pp, pp->atom);
+#endif
 		free(pp);
 	} while (p);
 
@@ -337,9 +337,13 @@ int parse(char *str, struct Sexp **tree) {
 }
 
 int eval(struct Sexp *s) {
+#if DEBUGEVAL
 	printf("in eval\n");
+#endif
 	print_sexp(s);
+#if DEBUGEVAL
 	printf("exit eval\n");
+#endif
 	return 0;
 }
 
@@ -416,8 +420,6 @@ int repl() {
 
 	*level = 0;
 	*str = '\0';
-	//input->type = OBJ_NULL;
-	//input->next = NULL;
 	*input = s_null;
 
 	while (read_line(STDIN_FILENO, buf, BUFFER_SIZE) == 0) {
@@ -443,20 +445,7 @@ int repl() {
 #if EVAL
 			eval(input);
 #endif
-			//free(str);
-			//free(input);
-
-			//if (!(input = malloc(sizeof(struct Sexp)))) {
-			//	fprintf(stderr, "can't initialize input tree\n");
-			//	exit(1);
-			//}
-
-			//if (!(str = malloc(sizeof(char)))) {
-			//	fprintf(stderr, "can't initialize str\n");
-			//	exit(1);
-			//}
 			free_sexp(input);
-
 			if (!(input = malloc(sizeof(struct Sexp)))) {
 				fprintf(stderr, "can't initialize input tree\n");
 				exit(1);
@@ -467,15 +456,13 @@ int repl() {
 			}
 
 			*str = '\0';
-			//input->type = OBJ_NULL;
-			//input->next = NULL;
 			*input = s_null;
 		}
 	}
 
 	free(str);
 	free(level);
-	//free(input);
+	free(input);
 	return 0;
 }
 
