@@ -118,7 +118,7 @@ static int count_close(char *str) {
 }
 
 
-static int sexp_end(char *str, char **end) {
+static int sexp_end(char *str, char **end, size_t n) {
 	/* find the end of the current sexp
 	 *
 	 * if the end is not found, return 1
@@ -133,8 +133,16 @@ static int sexp_end(char *str, char **end) {
 	printf("sexp_end(%s)\n", str);
 #endif
 
-	cp = strdup(str);
+	cp = malloc(n * sizeof(char));
+	cp = memcpy(cp, str, n);
 	save = cp;
+
+	size_t i = 0;
+	for (p = cp; i < n; i++, p++) {
+		if (*p == '\0') {
+			*p = ' ';
+		}
+	}
 
 	do {
 		p = tok(cp, SEXP_DELIM);
@@ -145,8 +153,8 @@ static int sexp_end(char *str, char **end) {
 		printf("{%lu}%s %d\n", strlen(cp), cp, level);
 #endif
 		if (level < 1) {
+			*end = (str + (p - save) + level);
 			free(save);
-			*end = (p + level);
 			return 0;
 		}
 
@@ -181,9 +189,7 @@ int print_sexp(struct Sexp *s) {
 				printf("%p {%s}\n", p, p->atom);
 				break;
 			case OBJ_PAIR:
-				printf("(\n");
 				print_sexp(p->pair);
-				printf(")\n");
 				break;
 			default:
 				printf("%p unknown sexp type\n", p);
@@ -275,59 +281,141 @@ int append_sexp(struct Sexp **dst, struct Sexp *src) {
 	return 0;
 }
 
-//int parse(char *str, struct Sexp *s) {
-int parse(char *str, struct Sexp **tree) {
-	//struct Sexp *s = *tree;
+void print_string(char *str, char *end) {
+	char *c = str;
+	printf("%p c\t%p end\n", c, end);
+
+	while (c != end) {
+		printf("0x%x ", *c);
+		c++;
+	}
+	printf("%p c\t%p end\n", c, end);
+	return;
+}
+
+size_t chop_sexp(char **input, size_t n) {
+	char *str = *input;
+	int err = 0;
 	char *end = NULL;
-	//char *t = NULL;
+	char *p = str;
+	size_t i = 0;
+
+	err = sexp_end(str, &end, n);
+	if (err) {
+		fprintf(stderr, "can't parse the sexp inside %s\n", str);
+		return 0;
+	}
+	str++;
+
+	for (p = str; p != end; p++) {
+		if (*p == '\0') {
+			*p = ' ';
+		}
+		i++;
+	}
+	while (p != str) {
+		if (*p == ')') {
+			*p = ' ';
+			break;
+		}
+		p--;
+		i--;
+	}
+
+	*input = str;
+
+	return end - str;
+}
+
+int parse(char *str, struct Sexp **tree, size_t n) {
+	/* args:
+	 *	char *str		= string to be parsed
+	 *	struct Sexp **tree	= tree to store the parsed Sexp
+	 *	size_t n		= length of string to be parsed (excluding last '\0')
+	 * */
+	char *end = str + n;
+	//char *start = str;
+	char *t = NULL;
 	int err = -1;
 	struct Sexp *c;
 
 #if DEBUGPARSE
-	printf("parsing %s\n", str);
+	printf("parsing %s of length %lu\n", str, n);
 #endif
 
-	c = malloc(sizeof(struct Sexp));
-
-	err = sexp_end(str, &end);
+	/* while loop, parse str until end */
+	err = sexp_end(str, &end, n);
 	if (err) {
-		fprintf(stderr, "can't parse the sexp\n%s", str);
+		fprintf(stderr, "can't parse the sexp %s\n", str);
 	}
 
+	size_t i = 0;
 	while (match(*str, SEXP_DELIM)) {
 		str++;	/* eat whitespace */
+		i++;
 	}
 
-	if (check_if_sexp(str)) {
-		str++;
-		printf("i'm here?\n");
-		/* parse the sexp one level down */
-	} else {
-		/* append the current atom to the sexp */
-		c->type = OBJ_ATOM;
-		c->atom = str;
-		c->next = NULL;
-#if DEBUGPARSE
-		printf("%p appending c\n", c);
-		printf("%p input pre parse\n", *tree);
-#endif
-		append_sexp(tree, c);
-#if DEBUGPARSE
-		printf("%p input post parse\n", *tree);
-#endif
-	}
 
 #if DEBUGPARSE
-	printf("begin %s .. %c end\n", str, *(end - 3));
+	//printf("begin %p .. %p end\n", str, end - 0);
+	//printf("begin %s .. %s end\n", str, (end - 0));
+	//printf("begin %x .. %x end\n", *str, *(end - 0));
 #endif
 
-	/*
+	end = NULL;
 	do {
 		t = tok(str, SEXP_DELIM);
+#if DEBUGPARSE
 		printf("tok: %s\n", str);
-		str = t;
-	} while (*t != '\0');
-	*/
+#endif
+
+		if (check_if_sexp(str)) {
+			/* parse the sexp one level down */
+
+			size_t sexp_len = 0;
+			sexp_len = chop_sexp(&str, n);
+#if DEBUGPARSE
+			printf("recursive call parse\n");
+			//print_string(str,end);
+#endif
+			struct Sexp *inside;
+			inside = malloc(sizeof(struct Sexp));
+			*inside = s_null;
+
+			parse(str, &inside, sexp_len);
+
+			c = malloc(sizeof(struct Sexp));
+			c->type = OBJ_PAIR;
+			c->pair = inside;
+			c->next = NULL;
+
+			append_sexp(tree, c);
+
+			i += (sexp_len);
+			str += sexp_len;
+		} else {
+			/* append the current atom to the sexp */
+
+			c = malloc(sizeof(struct Sexp));
+			c->type = OBJ_ATOM;
+			c->atom = str;
+			c->next = NULL;
+#if DEBUGPARSE
+			printf("%p appending c\n", c);
+			printf("%p input pre parse\n", *tree);
+#endif
+			append_sexp(tree, c);
+#if DEBUGPARSE
+			printf("%p input post parse\n", *tree);
+#endif
+			i += (t - str);
+			str = t;
+		}
+#if DEBUGPARSE
+		printf("chars parsed %lu\n", i);
+#endif
+
+	} while (*t != '\0' && i < n);
 
 #if DEBUGPARSE
 	printf("done parse\n");
@@ -432,7 +520,7 @@ int repl() {
 		printf("read %s\n", str);
 #endif
 #if DEBUGPARSE
-		i = sexp_end(str, &p);
+		i = sexp_end(str, &p, strlen(str));
 		printf("p %s\n", p);
 #endif
 
@@ -441,7 +529,7 @@ int repl() {
 #else
 		if (0) {
 #endif
-			parse(str, &input);
+			parse(str, &input, strlen(str));
 #if EVAL
 			eval(input);
 #endif

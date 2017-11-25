@@ -1,18 +1,20 @@
 PROGNAME=lisp
 
-SRC=$(wildcard src/*.c)
-OBJ=${SRC:.c=.o}
-CFLAGS=-Wall\
+SRCS=$(wildcard src/*.c)
+OBJS=${SRCS:.c=.o}
+CFLAGS=-g\
+       -Wall\
        -lbsd\
        -DPARSE\
        -DEVAL\
-       #-DDEBUGFREE_SEXP
+       #-DDEBUGPARSE\
+       #-DDEBUGSEXP_END\
 
-PROGNAME: ${OBJ} tags
-	cc ${CFLAGS} -o ${PROGNAME} ${OBJ}
+PROGNAME: ${OBJS} tags
+	cc ${CFLAGS} -o ${PROGNAME} ${OBJS}
 
-tags:
+tags: ${SRCS}
 	ctags -R src/
 
 clean:
-	rm ${PROGNAME} ${OBJ}
+	rm ${PROGNAME} ${OBJS}
