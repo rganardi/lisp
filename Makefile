@@ -11,7 +11,7 @@ CFLAGS=-g\
        #-DDEBUGSEXP_END\
 
 PROGNAME: ${OBJS} tags
-	cc ${CFLAGS} -o ${PROGNAME} ${OBJS}
+	cc -o ${PROGNAME} ${OBJS} ${CFLAGS}
 
 tags: ${SRCS}
 	ctags -R src/
