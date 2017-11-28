@@ -435,13 +435,15 @@ int eval(struct Sexp *s) {
 	return 0;
 }
 
-static int read_line(int fd, char *buf, size_t bufsiz) {
-	/* read at most bufsize chars from fd into buf (including '\0') */
+static int read_line(FILE *stream, char *buf, size_t bufsiz) {
+	/* read at most bufsize chars from fd into buf (including '\0')
+	 * */
 	size_t i = 0;
-	char c = '\0';
+	int c = '\0';
 
 	do {
-		if (read(fd, &c, sizeof(char)) != sizeof(char))
+		c = fgetc(stream);
+		if (c == EOF)
 			return -1;
 		buf[i++] = c;
 	} while (c != '\n' && i < (bufsiz - 1));
@@ -510,7 +512,7 @@ int repl() {
 	*str = '\0';
 	*input = s_null;
 
-	while (read_line(STDIN_FILENO, buf, BUFFER_SIZE) == 0) {
+	while (read_line(stdin, buf, BUFFER_SIZE) == 0) {
 #if DEBUGREAD
 		fprintf(stdout, "saved %s, read %s\n", str, buf);
 		printf("{%lu} in buf, {%lu} in str\n", strlen(buf), strlen(str));
@@ -529,6 +531,21 @@ int repl() {
 #else
 		if (0) {
 #endif
+			/* should be a loop that parse and eval
+                         * each complete sexp
+                         *
+                         * loop
+                         * *    maybe parse->parse_sexp
+                         * *    loop condition using sexp_end
+                         * *    chop with chop_sexp before parsing it
+                         *        with parse_sexp
+                         * *    eval the resulting tree
+                         * *    free stuff, initialize stuff
+                         * end loop
+                         *
+                         * free stuff, initialize stuff.
+                         *
+                         * */
 			parse(str, &input, strlen(str));
 #if EVAL
 			eval(input);
