@@ -3,15 +3,19 @@ PROGNAME=lisp
 SRCS=$(wildcard src/*.c)
 OBJS=${SRCS:.c=.o}
 CFLAGS=-g\
+       -std=c11\
+       -pedantic\
        -Wall\
-       -lbsd\
        -DPARSE\
        -DEVAL\
+       -DMTRACE
        #-DDEBUGPARSE\
        #-DDEBUGSEXP_END\
 
+LDFLAGS=-lbsd
+
 PROGNAME: ${OBJS} tags
-	cc -o ${PROGNAME} ${OBJS} ${CFLAGS}
+	cc ${CFLAGS} -o ${PROGNAME} ${OBJS} ${LDFLAGS}
 
 tags: ${SRCS}
 	ctags -R src/

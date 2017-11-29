@@ -1,3 +1,8 @@
+#ifdef MTRACE
+#define _XOPEN_SOURCE
+#include <mcheck.h>
+#endif
+
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -183,16 +188,16 @@ int print_sexp(struct Sexp *s) {
 	while (p != NULL) {
 		switch (p->type) {
 			case OBJ_NULL:
-				printf("%p (null)\n", p);
+				printf("%p (null)\n", (void *) p);
 				break;
 			case OBJ_ATOM:
-				printf("%p {%s}\n", p, p->atom);
+				printf("%p {%s}\n", (void *) p, p->atom);
 				break;
 			case OBJ_PAIR:
 				print_sexp(p->pair);
 				break;
 			default:
-				printf("%p unknown sexp type\n", p);
+				printf("%p unknown sexp type\n", (void *) p);
 				return 1;
 		}
 
@@ -572,6 +577,10 @@ int repl() {
 }
 
 int main() {
+#ifdef MTRACE
+	putenv("MALLOC_TRACE=mtrace.log");
+	mtrace();
+#endif
 	repl();
 	return 0;
 }
