@@ -332,7 +332,7 @@ size_t chop_sexp(char **input, size_t n) {
 	return end - str;
 }
 
-int parse(char *str, struct Sexp **tree, size_t n) {
+int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	/* args:
 	 *	char *str		= string to be parsed
 	 *	struct Sexp **tree	= tree to store the parsed Sexp
@@ -387,7 +387,7 @@ int parse(char *str, struct Sexp **tree, size_t n) {
 			inside = malloc(sizeof(struct Sexp));
 			*inside = s_null;
 
-			parse(str, &inside, sexp_len);
+			parse_sexp(str, &inside, sexp_len);
 
 			c = malloc(sizeof(struct Sexp));
 			c->type = OBJ_PAIR;
@@ -406,12 +406,12 @@ int parse(char *str, struct Sexp **tree, size_t n) {
 			c->atom = str;
 			c->next = NULL;
 #if DEBUGPARSE
-			printf("%p appending c\n", c);
-			printf("%p input pre parse\n", *tree);
+			printf("%p appending c\n", (void *) c);
+			printf("%p input pre parse\n", (void *) *tree);
 #endif
 			append_sexp(tree, c);
 #if DEBUGPARSE
-			printf("%p input post parse\n", *tree);
+			printf("%p input post parse\n", (void *) *tree);
 #endif
 			i += (t - str);
 			str = t;
@@ -437,6 +437,25 @@ int eval(struct Sexp *s) {
 #if DEBUGEVAL
 	printf("exit eval\n");
 #endif
+	return 0;
+}
+
+int parse_eval(char *str) {
+	struct Sexp *input = NULL;
+
+	if (!(input = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "can't initialize input tree\n");
+		exit(1);
+	}
+
+	*input = s_null;
+
+	parse_sexp(str, &input, strlen(str));
+#if EVAL
+	eval(input);
+#endif
+	free_sexp(input);
+
 	return 0;
 }
 
@@ -490,14 +509,13 @@ size_t append_string(char **dest, const char *src) {
 int repl() {
 	char buf[BUFFER_SIZE];
 	char *str = NULL;
-#if DEBUGPARSE
+#if PARSE
 	char *p = NULL;
 #endif
 #if PARSE || DEBUGPARSE
 	int i = 0;
 #endif
 	int *level = NULL;
-	struct Sexp *input = NULL;
 
 	if (!(level = calloc(1, sizeof(int)))) {
 		fprintf(stderr, "can't initialize level\n");
@@ -508,14 +526,8 @@ int repl() {
 		exit(1);
 	}
 
-	if (!(input = malloc(sizeof(struct Sexp)))) {
-		fprintf(stderr, "can't initialize input tree\n");
-		exit(1);
-	}
-
 	*level = 0;
 	*str = '\0';
-	*input = s_null;
 
 	while (read_line(stdin, buf, BUFFER_SIZE) == 0) {
 #if DEBUGREAD
@@ -526,8 +538,10 @@ int repl() {
 #if DEBUGREAD
 		printf("read %s\n", str);
 #endif
-#if DEBUGPARSE
+#if PARSE
 		i = sexp_end(str, &p, strlen(str));
+#endif
+#if DEBUGPARSE
 		printf("p %s\n", p);
 #endif
 
@@ -536,43 +550,19 @@ int repl() {
 #else
 		if (0) {
 #endif
-			/* should be a loop that parse and eval
-                         * each complete sexp
-                         *
-                         * loop
-                         * *    maybe parse->parse_sexp
-                         * *    loop condition using sexp_end
-                         * *    chop with chop_sexp before parsing it
-                         *        with parse_sexp
-                         * *    eval the resulting tree
-                         * *    free stuff, initialize stuff
-                         * end loop
-                         *
-                         * free stuff, initialize stuff.
-                         *
-                         * */
-			parse(str, &input, strlen(str));
-#if EVAL
-			eval(input);
-#endif
-			free_sexp(input);
-			if (!(input = malloc(sizeof(struct Sexp)))) {
-				fprintf(stderr, "can't initialize input tree\n");
-				exit(1);
-			}
+			parse_eval(str);
+
 			if (!(str = realloc(str, sizeof(char)))) {
 				fprintf(stderr, "can't initialize str\n");
 				exit(1);
 			}
 
 			*str = '\0';
-			*input = s_null;
 		}
 	}
 
 	free(str);
 	free(level);
-	free(input);
 	return 0;
 }
 
