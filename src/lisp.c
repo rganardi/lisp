@@ -36,6 +36,17 @@ static const struct Sexp s_null = {
 	.next = NULL
 };
 
+int dump_string(char *str, size_t n) {
+	size_t i = 0;
+	char *p = str;
+
+	for (p = str; i < n; p++, i++) {
+		printf("%p\t%#x\t%c\n", (void *) p, *p, *p);
+	}
+
+	return i;
+}
+
 int match(char c, const char *bytes) {
 	const char *p = NULL;
 	for (p = bytes; *p != '\0'; p++) {
@@ -87,89 +98,40 @@ static char *tok(char *str, const char *delim) {
 	return p;
 }
 
-static int count_open(char *str) {
-	/* count the number of SEXP_BEGIN at the beginning of str */
-	int i = 0;
-	char *c = str;
-
-	while (match(*c, SEXP_BEGIN) && *c != '\0') {
-		i++;
-		c++;
-	}
-
-	return i;
-}
-
-static int count_close(char *str) {
-	/* count the number of SEXP_END at the end of str */
-	int i = 0;
-	char *c = &str[strlen(str) - 1];
-
-#ifdef DEBUGCOUNT
-	printf("count from %s ", c);
-#endif
-
-	while (match(*c, SEXP_END)) {
-		i++;
-
-		if (c == str) {
-			break;
-		}
-
-		c--;
-	}
-
-	return i;
-}
-
-
-static int sexp_end(char *str, char **end, size_t n) {
-	/* find the end of the current sexp
-	 *
-	 * if the end is not found, return 1
-	 *
-	 * */
-	int level = 0;
-	char *p = *end;
-	char *cp = NULL;
-	char *save = NULL;
-
-#ifdef DEBUGSEXP_END
-	printf("sexp_end(%s)\n", str);
-#endif
-
-	cp = malloc(n * sizeof(char));
-	cp = memcpy(cp, str, n);
-	save = cp;
-
-	size_t i = 0;
-	for (p = cp; i < n; i++, p++) {
-		if (*p == '\0') {
-			*p = ' ';
-		}
-	}
-
-	do {
-		p = tok(cp, SEXP_DELIM);
-		level += count_open(cp);
-		level -= count_close(cp);
-
-#ifdef DEBUGSEXP_END
-		printf("{%lu}%s %d\n", strlen(cp), cp, level);
-#endif
-		if (level < 1) {
-			*end = (str + (p - save) + level);
-			free(save);
-			return 0;
-		}
-
-		cp = p;
-	} while (*p != '\0');
-
-	free(save);
-
-	return 1;
-}
+//static int count_open(char *str) {
+//	/* count the number of SEXP_BEGIN at the beginning of str */
+//	int i = 0;
+//	char *c = str;
+//
+//	while (match(*c, SEXP_BEGIN) && *c != '\0') {
+//		i++;
+//		c++;
+//	}
+//
+//	return i;
+//}
+//
+//static int count_close(char *str) {
+//	/* count the number of SEXP_END at the end of str */
+//	int i = 0;
+//	char *c = &str[strlen(str) - 1];
+//
+//#ifdef DEBUGCOUNT
+//	printf("count from %s ", c);
+//#endif
+//
+//	while (match(*c, SEXP_END)) {
+//		i++;
+//
+//		if (c == str) {
+//			break;
+//		}
+//
+//		c--;
+//	}
+//
+//	return i;
+//}
 
 int check_if_sexp(char *str) {
 	while (match(*str, SEXP_DELIM)) {
@@ -180,6 +142,82 @@ int check_if_sexp(char *str) {
 	} else {
 		return 0;
 	}
+}
+
+static int sexp_end(char *str, char **end, size_t n) {
+	/* find the end of the sexp at the start of str */
+	char *p = str; //scan through the string
+	char *w = str; //scan through words
+	int level = 0; //nesting level in sexp
+	size_t i = 0; //char count
+
+	if (!(check_if_sexp(str))) {
+		return 1;
+	}
+
+	while (match(*p, SEXP_DELIM)) {
+		p++;
+		i++;
+	}
+
+	w = p;
+
+	while (*p != '\0' && i < n) {
+#if DEBUG_SEXP_END
+		printf("i %lu\tlevel %d\tp\t", i, level);
+		dump_string(p, 1);
+#endif
+		if (match(*p, SEXP_DELIM) || (i == (n - 1))) {
+#if DEBUG_SEXP_END
+			printf("w\t");
+			dump_string(w, 1);
+#endif
+			while (match(*w, SEXP_BEGIN)) {
+					w++;
+					level++;
+			}
+			if (match(*p, SEXP_DELIM)) {
+				w = p - 1;
+			} else if (i == (n - 1)) {
+				w = str + (n - 1);
+			}
+
+#if DEBUG_SEXP_END
+			printf("w here\t");
+			dump_string(w, 1);
+#endif
+			while (match(*w, SEXP_END)) {
+				w--;
+				level--;
+			}
+
+			if (level <= 0) {
+				if (match(*p, SEXP_DELIM)) {
+					*end = (p-1) + level;
+				} else if (i == (n - 1)) {
+					*end = str + (n - 1) + level;
+				}
+#if DEBUG_SEXP_END
+				printf("sexp_end: ends at ");
+				dump_string(*end, 1);
+#endif
+				return 0;
+			}
+
+			while (match(*p, SEXP_DELIM)) {
+				p++;
+				i++;
+			}
+
+			w = p;
+		} else {
+			p++;
+			i++;
+		}
+	}
+
+	*end = str;
+	return 1;
 }
 
 int print_sexp(struct Sexp *s) {
@@ -303,11 +341,14 @@ size_t chop_sexp(char **input, size_t n) {
 	int err = 0;
 	char *end = NULL;
 	char *p = str;
-	size_t i = 0;
+	size_t i = 0;	//FIXME: i is useless here. It's not used in logic,
+			//	 nor in return value.
 
+	printf("finding end sexp_end(\"%s\", NULL, %lu)\n", str, n);
+	dump_string(str, n);
 	err = sexp_end(str, &end, n);
 	if (err) {
-		fprintf(stderr, "can't parse the sexp inside %s\n", str);
+		fprintf(stderr, "chop_sexp: can't parse the sexp inside %s\n", str);
 		return 0;
 	}
 	str++;
@@ -351,7 +392,7 @@ int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	/* while loop, parse str until end */
 	err = sexp_end(str, &end, n);
 	if (err) {
-		fprintf(stderr, "can't parse the sexp %s\n", str);
+		fprintf(stderr, "parse_sexp: can't parse the sexp %s\n", str);
 	}
 
 	size_t i = 0;
@@ -378,9 +419,15 @@ int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 			/* parse the sexp one level down */
 
 			size_t sexp_len = 0;
+			printf("chop_sexp(\"%s\", %lu)\n", str, n);
 			sexp_len = chop_sexp(&str, n);
+			if (!(sexp_len)) {
+				printf("quitting\n");
+				return 1;
+			}
 #if DEBUGPARSE
-			printf("recursive call parse\n");
+			sleep(1);
+			printf("recursive call parse on %s\n", str);
 			//print_string(str,end);
 #endif
 			struct Sexp *inside;
@@ -536,7 +583,7 @@ int repl() {
 #endif
 		append_string(&str, buf);
 #if DEBUGREAD
-		printf("read %s\n", str);
+		printf("read {%lu} %s\n", strlen(str), str);
 #endif
 #if PARSE
 		i = sexp_end(str, &p, strlen(str));
