@@ -1,28 +1,20 @@
-#ifdef MTRACE
-#define _XOPEN_SOURCE
-#include <mcheck.h>
-#endif
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 #include <bsd/string.h>
 #include <stdlib.h>
 
-//#include "strlcat.c"
-
-#define BUFFER_SIZE 256
 #define SEXP_BEGIN "("
 #define SEXP_END ")"
 #define SEXP_DELIM " \t"
 
-enum s_type {
+static enum s_type {
 	OBJ_NULL,	/* scheme '() */
 	OBJ_ATOM,
 	OBJ_PAIR
 };
 
-struct Sexp {
+static struct Sexp {
 	enum s_type type;
 	union {
 		char *atom;
@@ -36,7 +28,6 @@ static const struct Sexp s_null = {
 	.next = NULL
 };
 
-#if DEBUG
 static int dump_string(char *str, size_t n) {
 	size_t i = 0;
 	char *p = str;
@@ -47,7 +38,6 @@ static int dump_string(char *str, size_t n) {
 
 	return i;
 }
-#endif
 
 static int match(char c, const char *bytes) {
 	const char *p = NULL;
@@ -182,62 +172,6 @@ static int sexp_end(char *str, char **end, size_t n) {
 
 	*end = str;
 	return 1;
-}
-
-static int print_sexp(struct Sexp *s) {
-	struct Sexp *p = s;
-	printf("(\n");
-	while (p != NULL) {
-		switch (p->type) {
-			case OBJ_NULL:
-				printf("%p (null)\n", (void *) p);
-				break;
-			case OBJ_ATOM:
-				printf("%p {%s}\n", (void *) p, p->atom);
-				break;
-			case OBJ_PAIR:
-				print_sexp(p->pair);
-				break;
-			default:
-				printf("%p unknown sexp type\n", (void *) p);
-				return 1;
-		}
-
-		p = p->next;
-		//printf("sleep print\n");
-		//sleep(1);
-	}
-	printf(")\n");
-
-	return 0;
-}
-
-static void free_sexp(struct Sexp *s) {
-	/* free a (null) terminated Sexp */
-	struct Sexp *p = s;
-	struct Sexp *pp = s;
-
-	do {
-		pp = p;
-		p = p->next;
-
-#if DEBUGFREE_SEXP
-		printf("freeing %p\n", pp);
-#endif
-		switch (pp->type) {
-			case OBJ_ATOM:
-				free(pp->atom);
-				break;
-			case OBJ_PAIR:
-				free_sexp(pp->pair);
-				break;
-			case OBJ_NULL:
-				break;
-		}
-		free(pp);
-	} while (p);
-
-	return;
 }
 
 static int append_sexp(struct Sexp **dst, struct Sexp *src) {
@@ -451,6 +385,34 @@ static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	return 0;
 }
 
+static int print_sexp(struct Sexp *s) {
+	struct Sexp *p = s;
+	printf("(\n");
+	while (p != NULL) {
+		switch (p->type) {
+			case OBJ_NULL:
+				printf("%p (null)\n", (void *) p);
+				break;
+			case OBJ_ATOM:
+				printf("%p {%s}\n", (void *) p, p->atom);
+				break;
+			case OBJ_PAIR:
+				print_sexp(p->pair);
+				break;
+			default:
+				printf("%p unknown sexp type\n", (void *) p);
+				return 1;
+		}
+
+		p = p->next;
+		//printf("sleep print\n");
+		//sleep(1);
+	}
+	printf(")\n");
+
+	return 0;
+}
+
 static int eval(struct Sexp *s) {
 #if DEBUGEVAL
 	printf("in eval\n");
@@ -462,8 +424,38 @@ static int eval(struct Sexp *s) {
 	return 0;
 }
 
-static int parse_eval(char *str) {
+void free_sexp(struct Sexp *s) {
+	/* free a (null) terminated Sexp */
+	struct Sexp *p = s;
+	struct Sexp *pp = s;
+
+	do {
+		pp = p;
+		p = p->next;
+
+#if DEBUGFREE_SEXP
+		printf("freeing %p\n", pp);
+#endif
+		switch (pp->type) {
+			case OBJ_ATOM:
+				free(pp->atom);
+				break;
+			case OBJ_PAIR:
+				free_sexp(pp->pair);
+				break;
+			case OBJ_NULL:
+				break;
+		}
+		free(pp);
+	} while (p);
+
+	return;
+}
+
+static int test_parse_sexp(char *str) {
+	int status = -1;
 	struct Sexp *input = NULL;
+
 
 	if (!(input = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "can't initialize input tree\n");
@@ -472,125 +464,150 @@ static int parse_eval(char *str) {
 
 	*input = s_null;
 
-	parse_sexp(str, &input, strlen(str));
-#if EVAL
+	printf("parse_sexp(\"%s\", &input, %lu)\n", str, strlen(str));
+	printf("str:\n");
+	dump_string(str, strlen(str) + 1);
+	status = parse_sexp(str, &input, strlen(str));
+	printf("input:\n");
 	eval(input);
-#endif
+
 	free_sexp(input);
-
-	return 0;
+	return status;
 }
 
-static int read_line(FILE *stream, char *buf, size_t bufsiz) {
-	// read at most bufsize chars from fd into buf (including '\0')
-	size_t i = 0;
-	int c = '\0';
+void test() {
+	int i = -1;
+	char **j = NULL;
+	char *tests[] = {
+		"",
+		" ",
+		"	",
+		" 	",
 
-	do {
-		c = fgetc(stream);
-		if (c == EOF)
-			return -1;
-		buf[i++] = c;
-	} while (c != '\n' && i < (bufsiz - 1));
+		//"a",
+		//" a",
+		//"a ",
+		//" a ",
 
-	if (buf[i - 1] == '\n') {
-		buf[i - 1] = ' '; /* eliminates '\n' */
-	}
-	buf[i] = '\0';
-	return 0;
-}
+		//"abc",
+		//" abc",
+		//"abc ",
+		//" abc ",
 
-static size_t append_string(char **dest, const char *src) {
-	char *dst = *dest;
-	size_t n = strlen(dst) + strlen(src) + 1;
+		//"a b",
+		//" a b",
+		//"a b ",
+		//" a b ",
 
-#ifdef DEBUGAPPEND
-	printf("pre strlen(dst) %lu, strlen(src) %lu\n", strlen(dst), strlen(src));
-#endif
+		//"ab cd",
+		//" ab cd",
+		//"ab cd ",
+		//" ab cd ",
 
-	dst = realloc(dst, n);
-	if (!dst) {
-		fprintf(stderr, "can't resize dst\n");
-	}
+		//"(a)",
+		//" (a)",
+		//"(a) ",
+		//" (a) ",
+		//"( a)",
+		//" ( a)",
+		//"( a) ",
+		//" ( a) ",
 
-	if (strlcat(dst, src, n) >= n) {
-		fprintf(stderr, "cat failed\n");
-	}
+		//"(a )",
+		//" (a )",
+		//"(a ) ",
+		//" (a ) ",
+		//"( a )",
+		//" ( a )",
+		//"( a ) ",
+		//" ( a ) ",
 
+		//"(abc)",
+		//" (abc)",
+		//"(abc) ",
+		//" (abc) ",
+		//"( abc)",
+		//" ( abc)",
+		//"( abc) ",
+		//" ( abc) ",
 
-#ifdef DEBUGAPPEND
-	printf("post strlen(dst) %lu, strlen(src) %lu n %lu \n", strlen(dst), strlen(src), n);
-#endif
-	*dest = dst;
-	return n;
-}
+		//"(abc )",
+		//" (abc )",
+		//"(abc ) ",
+		//" (abc ) ",
+		//"( abc )",
+		//" ( abc )",
+		//"( abc ) ",
+		//" ( abc ) ",
 
-static int repl() {
-	char buf[BUFFER_SIZE];
-	char *str = NULL;
-#if PARSE || DEBUGPARSE
-	char *p = NULL;
-	int i = 0;
-#endif
-	int *level = NULL;
+		//"(abc efg)",
+		//" (abc efg)",
+		//"(abc efg) ",
+		//" (abc efg) ",
+		//"( abc efg)",
+		//" ( abc efg)",
+		//"( abc efg) ",
+		//" ( abc efg) ",
 
-	if (!(level = calloc(1, sizeof(int)))) {
-		fprintf(stderr, "can't initialize level\n");
-	}
+		//"(abc efg )",
+		//" (abc efg )",
+		//"(abc efg ) ",
+		//" (abc efg ) ",
+		//"( abc efg )",
+		//" ( abc efg )",
+		//"( abc efg ) ",
+		//" ( abc efg ) ",
 
-	if (!(str = malloc(sizeof(char)))) {
-		fprintf(stderr, "can't initialize str\n");
-		exit(1);
-	}
+		//"(a)b)",
+		//" (a)b)",
+		//"(a)b) ",
+		//" (a)b) ",
+		//"( a)b)",
+		//" ( a)b)",
+		//"( a)b) ",
+		//" ( a)b) ",
 
-	*level = 0;
-	*str = '\0';
+		//"(a)b )",
+		//" (a)b )",
+		//"(a)b ) ",
+		//" (a)b ) ",
+		//"( a)b )",
+		//" ( a)b )",
+		//"( a)b ) ",
+		//" ( a)b ) ",
 
-	while (read_line(stdin, buf, BUFFER_SIZE) == 0) {
-#if DEBUGREAD
-		fprintf(stdout, "saved %s, read %s\n", str, buf);
-		printf("{%lu} in buf, {%lu} in str\n", strlen(buf), strlen(str));
-#endif
-		append_string(&str, buf);
-#if DEBUGREAD
-		printf("read {%lu} %s\n", strlen(str), str);
-#endif
-#if PARSE
-		i = check_if_sexp(str);
+		//"((a) b)",
+		//" ((a) b)",
+		//"((a) b) ",
+		//" ((a) b) ",
+		//"( (a) b)",
+		//" ( (a) b)",
+		//"( (a) b) ",
+		//" ( (a) b) ",
+
+		//"((a) b )",
+		//" ((a) b )",
+		//"((a) b ) ",
+		//" ((a) b ) ",
+		//"( (a) b )",
+		//" ( (a) b )",
+		//"( (a) b ) ",
+		//" ( (a) b ) ",
+
+		NULL};
+
+	for (j = tests; (*j) != NULL ; j++) {
+		i = test_parse_sexp(*j);
 		if (i) {
-			i = sexp_end(str, &p, strlen(str));
-		}
-#endif
-
-#if PARSE
-		if (!i) {
-#else
-		if (0) {
-#endif
-			parse_eval(str);
-
-			if (!(str = realloc(str, sizeof(char)))) {
-				fprintf(stderr, "can't initialize str\n");
-				exit(1);
-			}
-
-			*str = '\0';
+			printf("failed\n\n");
+		} else {
+			printf("success\n\n");
 		}
 	}
-
-	free(str);
-	free(level);
-	return 0;
+	return;
 }
 
 int main() {
-#ifdef MTRACE
-	putenv("MALLOC_TRACE=mtrace.log");
-	mtrace();
-#endif
-	repl();
-#ifdef MTRACE
-	muntrace();
-#endif
+	test();
 	return 0;
 }

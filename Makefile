@@ -8,12 +8,15 @@ CFLAGS=-g\
        -Wall\
        -DPARSE\
        -DEVAL\
-       -DDEBUGPARSE\
+       #-DDEBUG\
+       #-DDEBUGPARSE\
+       #-DMTRACE\
        -DDEBUGREAD\
-       -DMTRACE
        #-DDEBUGSEXP_END\
 
 LDFLAGS=-lbsd
+
+.PHONY: tags clean
 
 PROGNAME: ${OBJS} tags
 	cc ${CFLAGS} -o ${PROGNAME} ${OBJS} ${LDFLAGS}
