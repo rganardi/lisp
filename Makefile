@@ -8,10 +8,11 @@ CFLAGS=-g\
        -Wall\
        -DPARSE\
        -DEVAL\
-       #-DDEBUG\
+       -DMTRACE\
+       -DDEBUG\
+       -DDEBUGEVAL\
        #-DDEBUGPARSE\
-       #-DMTRACE\
-       -DDEBUGREAD\
+       #-DDEBUGREAD\
        #-DDEBUGSEXP_END\
 
 LDFLAGS=-lbsd

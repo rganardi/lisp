@@ -31,6 +31,12 @@ struct Sexp {
 	struct Sexp *next;
 };
 
+struct Env {
+	struct Env *next;
+	struct Sexp *s_object;
+	char *name;
+};
+
 static const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
@@ -298,6 +304,15 @@ static int append_sexp(struct Sexp **dst, struct Sexp *src) {
 	return 0;
 }
 
+size_t len_sexp(struct Sexp *s) {
+	size_t n = 0;
+	while (s) {
+		n++;
+		s = s->next;
+	}
+	return n;
+}
+
 static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	/* args:
 	 *	char *str		= string to be parsed
@@ -451,18 +466,186 @@ static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	return 0;
 }
 
-static int eval(struct Sexp *s) {
+int new_env_binding(struct Env **env, char *name, struct Sexp *s_object) {
+	struct Env *e = NULL;
+	struct Sexp *s = NULL;
+	char *str = NULL;
+
+	if (!(e = malloc(sizeof(struct Env)))) {
+		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
+		return 1;
+	}
+
+	if (!(s = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
+		return 1;
+	}
+
+	*s = *s_object;
+
+	if (!(str = malloc(sizeof(char) * (strlen(name)+1)))) {
+		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
+		return 1;
+	}
+
+	if (strlcpy(str, name, (strlen(name)+1)) >= (strlen(name)+1)) {
+		fprintf(stderr, "new_env_binding: strlcat failed\n");
+		return 1;
+	}
+
+	e->name = str;
+	e->s_object = s;
+	e->next = *env;
+
+	*env = e;
+
+	return 0;
+}
+
+void free_env(struct Env *env) {
+	struct Env *p = env;
+	struct Env *pp = env;
+
+	do {
+		pp = p;
+		p = p->next;
+
+		free(pp->name);
+		free_sexp(pp->s_object);
+
+		free(pp);
+	} while (p);
+
+	return;
+}
+
+int print_env(struct Env *env) {
+	while (env) {
+		printf("env->name\n");
+#if DEBUG
+		dump_string(env->name, strlen(env->name)+1);
+#endif
+		printf("env->s_object\n");
+		print_sexp(env->s_object);
+
+		env = env->next;
+	}
+	return 0;
+}
+
+int lookup_env(struct Env *env, char *name) {
+	//return 1 when name is found in env
+	//return 0 otherwise
+	while (env) {
+		if (!(strcmp(env->name, name))) {
+			return 1;
+		}
+		env = env->next;
+	}
+
+	return 0;
+}
+
+static int eval(struct Sexp *s, struct Env **env) {
+	struct Sexp *p = s;
 #if DEBUGEVAL
 	printf("in eval\n");
 #endif
 	print_sexp(s);
+
+	switch (s->type) {
+		case OBJ_NULL:
+			printf("eval: nil\n");
+			break;
+		case OBJ_ATOM:
+			//do lookup
+			printf("eval: atom\t%s\n", s->atom);
+
+			if (!(strncmp(s->atom, "p", 1))) {
+				printf("printing environment\n");
+				print_env(*env);
+			}
+
+			break;
+		case OBJ_PAIR:
+			//eval
+			printf("eval: pair\n");
+			p = s->pair;
+
+			switch (p->type) {
+				case OBJ_ATOM:
+					if (!(strcmp(p->atom, "define"))) {
+						if (len_sexp(p) != 4) {
+							return 1;
+						}
+
+						p = p->next;
+						if (p->type != OBJ_ATOM) {
+							fprintf(stderr, "eval: name must be an atom\n");
+						}
+
+						if (lookup_env(*env, p->atom)) {
+							//rebind
+						} else {
+							new_env_binding(env, p->atom, p->next);
+						}
+						printf("eval: \"%s\" bound to %p\n", p->atom, (void *) p->next);
+						print_sexp(p->next);
+						print_env(*env);
+						break;
+					} else if (!(strcmp(p->atom, "lambda"))) {
+						printf("lambda something\n");
+						break;
+					} else {
+						//function application
+					}
+				default:
+					fprintf(stderr, "eval: don't know what\n");
+					break;
+			}
+
+			//eval(s->pair, env);
+			break;
+		default:
+			fprintf(stderr, "eval failed\n");
+			break;
+	}
+
+	/*
+	do {
+		switch (s->type) {
+			case OBJ_NULL:
+				printf("eval: nil\n");
+				break;
+			case OBJ_ATOM:
+				//do lookup
+				printf("eval: atom\t%s\n", s->atom);
+
+				if (!(strcmp(s->atom, "define"))) {
+					printf("trying to define something\n");
+				} else {
+				}
+				break;
+			case OBJ_PAIR:
+				//eval
+				printf("eval: pair\n");
+				eval(s->pair, env);
+				break;
+			default:
+				fprintf(stderr, "eval failed\n");
+				break;
+		}
+		s = s->next;
+	} while (s);
+	*/
+
 #if DEBUGEVAL
 	printf("exit eval\n");
 #endif
 	return 0;
 }
 
-static int parse_eval(char *str) {
+static int parse_eval(char *str, struct Env **env) {
 	struct Sexp *input = NULL;
 
 	if (!(input = malloc(sizeof(struct Sexp)))) {
@@ -474,7 +657,7 @@ static int parse_eval(char *str) {
 
 	parse_sexp(str, &input, strlen(str));
 #if EVAL
-	eval(input);
+	eval(input, env);
 #endif
 	free_sexp(input);
 
@@ -533,6 +716,7 @@ static int repl() {
 	int i = 0;
 #endif
 	int *level = NULL;
+	struct Env *global = NULL;
 
 	if (!(level = calloc(1, sizeof(int)))) {
 		fprintf(stderr, "can't initialize level\n");
@@ -545,6 +729,11 @@ static int repl() {
 
 	*level = 0;
 	*str = '\0';
+
+	if (new_env_binding(&global, "nil", (struct Sexp *) &s_null)) {
+		fprintf(stderr, "failed to define global environment\n");
+		exit(1);
+	}
 
 	while (read_line(stdin, buf, BUFFER_SIZE) == 0) {
 #if DEBUGREAD
@@ -567,7 +756,7 @@ static int repl() {
 #else
 		if (0) {
 #endif
-			parse_eval(str);
+			parse_eval(str, &global);
 
 			if (!(str = realloc(str, sizeof(char)))) {
 				fprintf(stderr, "can't initialize str\n");
@@ -578,12 +767,14 @@ static int repl() {
 		}
 	}
 
+	free_env(global);
 	free(str);
 	free(level);
 	return 0;
 }
 
 int main() {
+	printf("main %p\n", (void *) main);
 #ifdef MTRACE
 	putenv("MALLOC_TRACE=mtrace.log");
 	mtrace();
