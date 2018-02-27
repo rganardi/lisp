@@ -37,6 +37,12 @@ struct Env {
 	char *name;
 };
 
+struct Closure {
+	struct Sexp *arg;
+	struct Sexp *body;
+	struct Env *env;
+};
+
 static const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
@@ -192,9 +198,12 @@ static int sexp_end(char *str, char **end, size_t n) {
 
 static int print_sexp(struct Sexp *s) {
 	struct Sexp *p = s;
+#if DEBUG
 	printf("(\n");
+#endif
 	while (p != NULL) {
 		switch (p->type) {
+#if DEBUG
 			case OBJ_NULL:
 				printf("%p (null)\n", (void *) p);
 				break;
@@ -207,13 +216,30 @@ static int print_sexp(struct Sexp *s) {
 			default:
 				printf("%p unknown sexp type\n", (void *) p);
 				return 1;
+#else
+			case OBJ_NULL:
+				break;
+			case OBJ_ATOM:
+				printf("\"%s\" ", p->atom);
+				break;
+			case OBJ_PAIR:
+				printf("(");
+				print_sexp(p->pair);
+				printf(") ");
+				break;
+			default:
+				printf("unknown sexp type\n");
+				return 1;
+#endif
 		}
 
 		p = p->next;
 		//printf("sleep print\n");
 		//sleep(1);
 	}
+#if DEBUG
 	printf(")\n");
+#endif
 
 	return 0;
 }
@@ -558,6 +584,56 @@ int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	return 0;
 }
 
+int env_cp(struct Env **dst, struct Env src) {
+	//*dst should be a pointer to NULL
+	struct Env *s = &src;
+	struct Env *d = NULL;
+	struct Env *dd = *dst;
+	struct Sexp *p = NULL;
+	char *str = NULL;
+
+	while (s) {
+		if (!(d = malloc(sizeof(struct Env)))) {
+			fprintf(stderr, "env_cp: can't allocate memory for new environment\n");
+			return 1;
+		}
+
+		if (!(p = malloc(sizeof(struct Sexp)))) {
+			fprintf(stderr, "env_cp: can't allocate memory for new environment\n");
+			return 1;
+		}
+
+		if(sexp_cp(p, s->s_object)) {
+			fprintf(stderr, "env_cp: failed to copy env\n");
+			return 1;
+		}
+
+		if (!(str = malloc(sizeof(char) * (strlen(s->name)+1)))) {
+			fprintf(stderr, "env_cp: can't allocate memory for new environment\n");
+			return 1;
+		}
+
+		if (strlcpy(str, s->name, (strlen(s->name)+1)) >= (strlen(s->name)+1)) {
+			fprintf(stderr, "env_cp: strlcpy failed\n");
+			return 1;
+		}
+
+		d->name = str;
+		d->s_object = p;
+		if (dd) {
+			dd->next = d;
+		} else {
+			*dst = d;
+		}
+		dd = d;
+
+		s = s->next;
+	}
+	dd->next = NULL;
+
+	return 0;
+}
+
 int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	struct Env *e = *env;
 	struct Sexp *s = NULL;
@@ -608,12 +684,17 @@ void free_env(struct Env *env) {
 
 int print_env(struct Env *env) {
 	while (env) {
-		printf("env->name\n");
 #if DEBUG
+		printf("env->name\n");
 		dump_string(env->name, strlen(env->name)+1);
+#else
+		printf("env->name\t%s\n", env->name);
 #endif
 		printf("env->s_object\n");
 		print_sexp(env->s_object);
+#ifndef DEBUG
+		printf("\n");
+#endif
 
 		env = env->next;
 	}
@@ -634,13 +715,96 @@ int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	return 0;
 }
 
-static int eval(struct Sexp *s, struct Env **env) {
+int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
+	struct Sexp *p = NULL;
+	struct Closure *c = NULL;
+	struct Env *e = NULL;
+
+	if (s->type != OBJ_PAIR) {
+		fprintf(stderr, "new_closure: not a lambda expression\n");
+		return 1;
+	}
+
+	if (strncmp((s->pair)->atom, "lambda", strlen("lambda")+1)
+			|| len_sexp(s->pair) < 4) {
+		fprintf(stderr, "new_closure: not a valid lambda expression\n");
+		return 1;
+	}
+
+	if (!(c = malloc(sizeof(struct Closure)))) {
+		fprintf(stderr, "new_closure: not enough memory for a closure\n");
+		return 1;
+	}
+
+	if (!(p = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "new_closure: not enough memory for a sexp\n");
+		return 1;
+	}
+
+	if (sexp_cp(p, ((s->pair)->next)->pair)) {
+		fprintf(stderr, "new_closure: failed to copy args\n");
+		return 1;
+	}
+
+	c->arg = p;
+
+	if (!(p = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "new_closure: not enough memory for a sexp\n");
+		return 1;
+	}
+
+	if (sexp_cp(p, ((s->pair)->next)->next)) {
+		fprintf(stderr, "new_closure: failed to copy args\n");
+		return 1;
+	}
+
+	c->body = p;
+
+	if (env_cp(&e, env)) {
+		fprintf(stderr, "new_closure: can't copy environment");
+		return 1;
+	}
+
+	c->env = e;
+
+	*cl = c;
+
+	return 0;
+}
+
+int print_closure(struct Closure *cl) {
+	printf("cl->arg\n");
+	if (print_sexp(cl->arg)) {
+		return 1;
+	}
+
+	printf("cl->body\n");
+	if (print_sexp(cl->body)) {
+		return 1;
+	}
+
+	printf("cl->env\n");
+	if (print_env(cl->env)) {
+		return 1;
+	}
+	return 0;
+}
+
+void free_closure(struct Closure *cl) {
+	free_sexp(cl->arg);
+	free_sexp(cl->body);
+	free_env(cl->env);
+	free(cl);
+}
+
+static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	struct Sexp *p = s;
-	struct Sexp *pp = NULL;
+	struct Sexp *result = NULL;
+	struct Closure *cl = NULL;
 #if DEBUGEVAL
 	printf("in eval\n");
-#endif
 	print_sexp(s);
+#endif
 
 	switch (s->type) {
 		case OBJ_NULL:
@@ -648,16 +812,22 @@ static int eval(struct Sexp *s, struct Env **env) {
 			break;
 		case OBJ_ATOM:
 			//do lookup
+#if DEBUGEVAL
 			printf("eval: atom\t%s\n", s->atom);
+#endif
 
-			if (!(strncmp(s->atom, ",p", 1))) {
+			if (!(strncmp(s->atom, ",p", strlen(",p")+1))) {
 				printf("printing environment\n");
 				print_env(*env);
 				break;
 			}
 
-			if (lookup_env(*env, p->atom, &pp)) {
-				print_sexp(pp);
+			if (lookup_env(*env, p->atom, &result)) {
+				print_sexp(result);
+				*res = result;
+#ifndef DEBUG
+				printf("\n");
+#endif
 			} else {
 				fprintf(stderr, "eval: %s not found\n", p->atom);
 			}
@@ -665,7 +835,9 @@ static int eval(struct Sexp *s, struct Env **env) {
 			break;
 		case OBJ_PAIR:
 			//eval
+#if DEBUGEVAL
 			printf("eval: pair\n");
+#endif
 			p = s->pair;
 
 			switch (p->type) {
@@ -680,7 +852,7 @@ static int eval(struct Sexp *s, struct Env **env) {
 							fprintf(stderr, "eval: name must be an atom\n");
 						}
 
-						if (lookup_env(*env, p->atom, &pp)) {
+						if (lookup_env(*env, p->atom, &result)) {
 							if (env_rebind(env, p->atom, *(p->next))) {
 								fprintf(stderr, "eval: rebind failed\n");
 							}
@@ -692,9 +864,16 @@ static int eval(struct Sexp *s, struct Env **env) {
 #if DEBUG_DEFINE
 						print_env(*env);
 #endif
+						*res = NULL;
 						break;
 					} else if (!(strcmp(p->atom, "lambda"))) {
+#if DEBUG_EVAL
 						printf("lambda something\n");
+#endif
+						if(!(new_closure(&cl, s, **env))) {
+							print_closure(cl);
+							free_closure(cl);
+						}
 						break;
 					} else {
 						//function application
@@ -703,41 +882,11 @@ static int eval(struct Sexp *s, struct Env **env) {
 					fprintf(stderr, "eval: don't know what\n");
 					break;
 			}
-
-			//eval(s->pair, env);
 			break;
 		default:
 			fprintf(stderr, "eval failed\n");
 			break;
 	}
-
-	/*
-	do {
-		switch (s->type) {
-			case OBJ_NULL:
-				printf("eval: nil\n");
-				break;
-			case OBJ_ATOM:
-				//do lookup
-				printf("eval: atom\t%s\n", s->atom);
-
-				if (!(strcmp(s->atom, "define"))) {
-					printf("trying to define something\n");
-				} else {
-				}
-				break;
-			case OBJ_PAIR:
-				//eval
-				printf("eval: pair\n");
-				eval(s->pair, env);
-				break;
-			default:
-				fprintf(stderr, "eval failed\n");
-				break;
-		}
-		s = s->next;
-	} while (s);
-	*/
 
 #if DEBUGEVAL
 	printf("exit eval\n");
@@ -747,6 +896,7 @@ static int eval(struct Sexp *s, struct Env **env) {
 
 static int parse_eval(char *str, struct Env **env) {
 	struct Sexp *input = NULL;
+	struct Sexp *res = NULL;
 
 	if (!(input = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "can't initialize input tree\n");
@@ -757,7 +907,8 @@ static int parse_eval(char *str, struct Env **env) {
 
 	parse_sexp(str, &input, strlen(str));
 #if EVAL
-	eval(input, env);
+	eval(input, env, &res);
+	print_sexp(res);
 #endif
 	free_sexp(input);
 
