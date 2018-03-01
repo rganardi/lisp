@@ -333,6 +333,9 @@ static int append_sexp(struct Sexp **dst, struct Sexp *src) {
 size_t len_sexp(struct Sexp *s) {
 	size_t n = 0;
 	while (s) {
+		if (s->type == OBJ_NULL) {
+			break;
+		}
 		n++;
 		s = s->next;
 	}
@@ -545,6 +548,37 @@ int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 	return 0;
 }
 
+static int sexp_sub(struct Sexp **orig, struct Sexp *new) {
+	//subs in the Sexp pointed to at orig by new
+	struct Sexp *s = NULL;
+
+	if (len_sexp(new) != 1) {
+		fprintf(stderr, "sexp_sub: len_sexp(new) is %lu != 1\n", len_sexp(new));
+		return 1;
+	}
+
+	if (!(s = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "sexp_sub: not enough memory to sub\n");
+		return 1;
+	}
+
+	if (sexp_cp(s, new)) {
+		fprintf(stderr, "sexp_sub: can't copy new sexp\n");
+		return 1;
+	}
+
+	free_sexp(s->next);
+
+	s->next = (*orig)->next;
+
+	(*orig)->next = NULL;
+	free_sexp(*orig);
+
+	*orig = s;
+
+	return 0;
+}
+
 int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	struct Env *e = NULL;
 	struct Sexp *s = NULL;
@@ -726,7 +760,7 @@ int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
 	}
 
 	if (strncmp((s->pair)->atom, "lambda", strlen("lambda")+1)
-			|| len_sexp(s->pair) < 4) {
+			|| len_sexp(s->pair) < 3) {
 		fprintf(stderr, "new_closure: not a valid lambda expression\n");
 		return 1;
 	}
@@ -800,7 +834,6 @@ void free_closure(struct Closure *cl) {
 static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	struct Sexp *p = s;
 	struct Sexp *result = NULL;
-	struct Closure *cl = NULL;
 #if DEBUGEVAL
 	printf("in eval\n");
 	print_sexp(s);
@@ -830,6 +863,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #endif
 			} else {
 				fprintf(stderr, "eval: %s not found\n", p->atom);
+				return 1;
 			}
 
 			break;
@@ -843,22 +877,26 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			switch (p->type) {
 				case OBJ_ATOM:
 					if (!(strcmp(p->atom, "define"))) {
-						if (len_sexp(p) != 4) {
+						if (len_sexp(p) != 3) {
+							fprintf(stderr, "eval: define takes exactly two args\n");
 							return 1;
 						}
 
 						p = p->next;
 						if (p->type != OBJ_ATOM) {
 							fprintf(stderr, "eval: name must be an atom\n");
+							return 1;
 						}
 
 						if (lookup_env(*env, p->atom, &result)) {
 							if (env_rebind(env, p->atom, *(p->next))) {
 								fprintf(stderr, "eval: rebind failed\n");
+								return 1;
 							}
 						} else {
 							if (new_env_binding(env, p->atom, *(p->next))) {
 								fprintf(stderr, "eval: new binding failed\n");
+								return 1;
 							}
 						}
 #if DEBUG_DEFINE
@@ -866,17 +904,27 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #endif
 						*res = NULL;
 						break;
-					} else if (!(strcmp(p->atom, "lambda"))) {
-#if DEBUG_EVAL
-						printf("lambda something\n");
-#endif
-						if(!(new_closure(&cl, s, **env))) {
-							print_closure(cl);
-							free_closure(cl);
+					} else if (lookup_env(*env, p->atom, &result)) {
+						//function application (maybe)
+						//lookup function and replace it by the definition
+						if (sexp_sub(&p, result)) {
+							fprintf(stderr, "eval: substitution failed\n");
+							return 1;
 						}
+						s->pair = p;
+						*res = s;
+						break;
+					}
+				case OBJ_PAIR:
+					p = p->pair;
+					if (p->type == OBJ_ATOM && !(strcmp(p->atom, "lambda"))) {
+						//lambda expression
+						//do beta reduction
 						break;
 					} else {
-						//function application
+						//function application (maybe)
+						//lookup function and replace it by the definition
+						break;
 					}
 				default:
 					fprintf(stderr, "eval: don't know what\n");
