@@ -8,6 +8,7 @@
 #include <string.h>
 #include <bsd/string.h>
 #include <stdlib.h>
+#include <signal.h>
 
 //#include "strlcat.c"
 
@@ -47,6 +48,11 @@ static const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
 };
+
+void segfault_handler(int error) {
+	fprintf(stderr, "SEGFAULT, bad program!\n");
+	exit(1);
+}
 
 #if DEBUG
 static int dump_string(char *str, size_t n) {
@@ -1078,6 +1084,7 @@ int main() {
 	putenv("MALLOC_TRACE=mtrace.log");
 	mtrace();
 #endif
+	signal(SIGSEGV, segfault_handler);
 	repl();
 #ifdef MTRACE
 	muntrace();
