@@ -49,7 +49,24 @@ static const struct Sexp s_null = {
 	.next = NULL
 };
 
-void segfault_handler(int error) {
+static void segfault_handler(int error);
+static int dump_string(char *str, size_t n);
+static int tok(char *str, char **start, char **end, char **next, size_t n);
+static int check_if_sexp(char *str);
+static int sexp_end(char *str, char **end, size_t n);
+static int print_sexp(struct Sexp *s);
+static void free_sexp(struct Sexp *s);
+static int append_sexp(struct Sexp **dst, struct Sexp *src);
+static int parse_sexp(char *str, struct Sexp **tree, size_t n);
+static int sexp_sub(struct Sexp **orig, struct Sexp *new);
+static int s_define(struct Sexp *s, struct Env **env);
+static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res);
+static int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
+static int parse_eval(char *str, struct Env **env);
+static int read_line(FILE *stream, char *buf, size_t bufsiz);
+static int repl();
+
+static void segfault_handler(int error) {
 	fprintf(stderr, "SEGFAULT, bad program!\n");
 	exit(1);
 }
@@ -869,6 +886,87 @@ static int s_define(struct Sexp *s, struct Env **env) {
 	return 0;
 }
 
+static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
+	// s = ((lambda (x) body) args)
+	struct Sexp *p = NULL;
+	struct Sexp *arg = NULL;
+
+	if (len_sexp(s->pair) < 3) {
+		fprintf(stderr, "s_lambda: lambda expression must be of length at least 3\n");
+		return 1;
+	}
+
+	//do beta reduction
+	switch (((s->pair)->next)->type) {
+		case OBJ_NULL:
+			//(lambda () body)
+			break;
+		case OBJ_ATOM:
+			//(lambda x body)
+			if (!(p = malloc(sizeof(struct Sexp)))) {
+				fprintf(stderr, "s_lambda: not enough memory\n");
+				return 1;
+			}
+
+			p->type = OBJ_PAIR;
+			p->pair = ((s->pair)->next)->next;
+			p->next = NULL;
+			if (new_env_binding(&env,
+						(((s->pair)->next)->atom),
+						*p)) {
+
+				fprintf(stderr, "s_lambda: failed to bind arguments to formal params\n");
+				return 1;
+			}
+			free_sexp(p);
+			break;
+		case OBJ_PAIR:
+			//(lambda (x ...) body)
+			p = ((s->pair)->next)->pair;
+			arg = s->next;
+			while (p || arg) {
+				if (p->type == OBJ_NULL
+						&& arg->type == OBJ_NULL) {
+					break;
+				} else if (p->type == OBJ_NULL
+						|| arg->type == OBJ_NULL) {
+					fprintf(stderr, "s_lambda: wrong number of arguments supplied\n");
+					return 1;
+				}
+
+				if (new_env_binding(&env,
+							p->atom,
+							*arg)) {
+					fprintf(stderr, "s_lambda: failed to bind arguments to formal params\n");
+					return 1;
+				}
+
+				p = p->next;
+				arg = arg->next;
+			}
+			break;
+		default:
+			fprintf(stderr, "s_lambda: unrecognized lambda expression\n");
+			return 1;
+	}
+
+	//eval body
+	p = (((s->pair)->next)->next);
+	while (p) {
+		if (p->type == OBJ_NULL) {
+			break;
+		}
+
+		if (eval(p, &env, res)) {
+			fprintf(stderr, "s_lambda: eval failed\n");
+			return 1;
+		}
+		p = p->next;
+	}
+
+	return 0;
+}
+
 static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	//only eval the first element of s.
 	//on return, if *res != NULL, then you should free it.
@@ -943,7 +1041,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #if DEBUGEVAL
 						printf("eval: lambda expression\n");
 #endif
-						return 0;
+						return s_lambda(p, *env, res);
 						break;
 					}
 					//fall through;
