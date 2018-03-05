@@ -953,6 +953,41 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #if DEBUGEVAL
 					printf("eval: function call\n");
 #endif
+
+					while (p) {
+						if (p->type == OBJ_NULL) {
+							break;
+						}
+
+						if (eval(p, env, &result)) {
+							printf("eval: failed to eval\n");
+							print_sexp(p);
+							return 1;
+						} else {
+							//sub in
+							if (sexp_sub(&p, result)) {
+								fprintf(stderr, "eval: substitution failed\n");
+								return 1;
+							}
+							free_sexp(result);
+
+							if (pp) {
+								pp->next = p;
+							} else {
+								s->pair = p;
+							}
+							pp = p;
+						}
+
+						p = p->next;
+					}
+
+#if DEBUGEVAL
+					printf("after sub:\n");
+					print_sexp(s);
+#endif
+
+					return eval(s, env, res);
 					break;
 			}
 			break;
