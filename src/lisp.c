@@ -837,6 +837,37 @@ void free_closure(struct Closure *cl) {
 	free(cl);
 }
 
+static int s_define(struct Sexp *s, struct Env **env) {
+	struct Sexp *p = NULL;
+
+	if (len_sexp(s) != 3) {
+		fprintf(stderr, "s_define: define takes exactly two args\n");
+		return 1;
+	}
+
+	s = s->next;
+	if (s->type != OBJ_ATOM) {
+		fprintf(stderr, "s_define: name must be an atom\n");
+		return 1;
+	}
+
+	if (lookup_env(*env, s->atom, &p)) {
+		if (env_rebind(env, s->atom, *(s->next))) {
+			fprintf(stderr, "s_define: rebind failed\n");
+			return 1;
+		}
+	} else {
+		if (new_env_binding(env, s->atom, *(s->next))) {
+			fprintf(stderr, "s_define: new binding failed\n");
+			return 1;
+		}
+	}
+#if DEBUG_DEFINE
+	print_env(*env);
+#endif
+	return 0;
+}
+
 static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	struct Sexp *p = s;
 	struct Sexp *result = NULL;
@@ -883,42 +914,8 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			switch (p->type) {
 				case OBJ_ATOM:
 					if (!(strcmp(p->atom, "define"))) {
-						if (len_sexp(p) != 3) {
-							fprintf(stderr, "eval: define takes exactly two args\n");
-							return 1;
-						}
-
-						p = p->next;
-						if (p->type != OBJ_ATOM) {
-							fprintf(stderr, "eval: name must be an atom\n");
-							return 1;
-						}
-
-						if (lookup_env(*env, p->atom, &result)) {
-							if (env_rebind(env, p->atom, *(p->next))) {
-								fprintf(stderr, "eval: rebind failed\n");
-								return 1;
-							}
-						} else {
-							if (new_env_binding(env, p->atom, *(p->next))) {
-								fprintf(stderr, "eval: new binding failed\n");
-								return 1;
-							}
-						}
-#if DEBUG_DEFINE
-						print_env(*env);
-#endif
 						*res = NULL;
-						break;
-					} else if (lookup_env(*env, p->atom, &result)) {
-						//function application (maybe)
-						//lookup function and replace it by the definition
-						if (sexp_sub(&p, result)) {
-							fprintf(stderr, "eval: substitution failed\n");
-							return 1;
-						}
-						s->pair = p;
-						*res = s;
+						return s_define(p, env);
 						break;
 					}
 				case OBJ_PAIR:
