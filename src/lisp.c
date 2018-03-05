@@ -463,7 +463,7 @@ static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 
 			append_sexp(tree, c);
 
-			i += (end - start) + 1;
+			i += (end - str) + 1;
 			str = end + 1;
 		} else {
 			/* append the current atom to the sexp */
@@ -1104,8 +1104,10 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 
 static int parse_eval(char *str, struct Env **env) {
 	struct Sexp *input = NULL;
+#if EVAL
 	struct Sexp *p = NULL;
 	struct Sexp *res = NULL;
+#endif
 
 	if (!(input = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "can't initialize input tree\n");
@@ -1115,8 +1117,11 @@ static int parse_eval(char *str, struct Env **env) {
 	*input = s_null;
 
 	parse_sexp(str, &input, strlen(str));
-	p = input;
+#if DEBUGPARSE
+	print_sexp(input);
+#endif
 #if EVAL
+	p = input;
 	while (p) {
 		if (p->type == OBJ_NULL) {
 			break;
