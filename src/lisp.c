@@ -50,7 +50,9 @@ static const struct Sexp s_null = {
 };
 
 static void segfault_handler(int error);
+#if DEBUG
 static int dump_string(char *str, size_t n);
+#endif
 static int tok(char *str, char **start, char **end, char **next, size_t n);
 static int check_if_sexp(char *str);
 static int sexp_end(char *str, char **end, size_t n);
@@ -995,7 +997,9 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			}
 
 			if (lookup_env(*env, s->atom, &result)) {
+#if DEBUGEVAL
 				print_sexp(result);
+#endif
 				if (!(*res = malloc(sizeof(struct Sexp)))) {
 					fprintf(stderr, "eval: failed to alloc after lookup\n");
 					return 1;
@@ -1010,7 +1014,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #endif
 				return 0;
 			} else {
-				fprintf(stderr, "eval: %s not found\n", p->atom);
+				fprintf(stderr, "eval: \"%s\" not found\n", p->atom);
 				return 1;
 			}
 
@@ -1132,6 +1136,9 @@ static int parse_eval(char *str, struct Env **env) {
 		} else {
 			if (res) {
 				print_sexp(res);
+#ifndef DEBUG
+				printf("\n");
+#endif
 				free_sexp(res);
 			} else {
 				printf("parse_eval: unspecified\n");
@@ -1234,7 +1241,7 @@ static int repl() {
 #endif
 
 #if PARSE
-		if (!i) {
+		if (!i && *str != ';') {
 #else
 		if (0) {
 #endif
