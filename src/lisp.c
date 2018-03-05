@@ -751,6 +751,7 @@ int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 		}
 		env = env->next;
 	}
+	*s = NULL;
 
 	return 0;
 }
@@ -869,7 +870,10 @@ static int s_define(struct Sexp *s, struct Env **env) {
 }
 
 static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
+	//only eval the first element of s.
+	//on return, if *res != NULL, then you should free it.
 	struct Sexp *p = s;
+	struct Sexp *pp = NULL;
 	struct Sexp *result = NULL;
 #if DEBUGEVAL
 	printf("in eval\n");
@@ -892,12 +896,21 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 				break;
 			}
 
-			if (lookup_env(*env, p->atom, &result)) {
+			if (lookup_env(*env, s->atom, &result)) {
 				print_sexp(result);
-				*res = result;
+				if (!(*res = malloc(sizeof(struct Sexp)))) {
+					fprintf(stderr, "eval: failed to alloc after lookup\n");
+					return 1;
+				}
+
+				if (sexp_cp(*res, result)) {
+					fprintf(stderr, "eval: failed to copy result after lookup\n");
+					return 1;
+				}
 #ifndef DEBUG
 				printf("\n");
 #endif
+				return 0;
 			} else {
 				fprintf(stderr, "eval: %s not found\n", p->atom);
 				return 1;
@@ -912,33 +925,44 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			p = s->pair;
 
 			switch (p->type) {
+				case OBJ_NULL:
+					printf("eval: calling a non-function!\n");
+					return 1;
+					break;
 				case OBJ_ATOM:
 					if (!(strcmp(p->atom, "define"))) {
 						*res = NULL;
 						return s_define(p, env);
 						break;
 					}
+					//fall through;
 				case OBJ_PAIR:
-					p = p->pair;
-					if (p->type == OBJ_ATOM && !(strcmp(p->atom, "lambda"))) {
+					if ((p->pair)->type == OBJ_ATOM && !(strcmp((p->pair)->atom, "lambda"))) {
 						//lambda expression
 						//do beta reduction
-						break;
-					} else {
-						//function application (maybe)
-						//lookup function and replace it by the definition
+#if DEBUGEVAL
+						printf("eval: lambda expression\n");
+#endif
+						return 0;
 						break;
 					}
+					//fall through;
 				default:
-					fprintf(stderr, "eval: don't know what\n");
+					//function application (maybe)
+					//lookup function and replace it by the definition
+#if DEBUGEVAL
+					printf("eval: function call\n");
+#endif
 					break;
 			}
 			break;
 		default:
-			fprintf(stderr, "eval failed\n");
+			fprintf(stderr, "eval: failed, unknown sexp type\n");
+			return 1;
 			break;
 	}
 
+	//unreachable
 #if DEBUGEVAL
 	printf("exit eval\n");
 #endif
@@ -947,6 +971,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 
 static int parse_eval(char *str, struct Env **env) {
 	struct Sexp *input = NULL;
+	struct Sexp *p = NULL;
 	struct Sexp *res = NULL;
 
 	if (!(input = malloc(sizeof(struct Sexp)))) {
@@ -957,9 +982,26 @@ static int parse_eval(char *str, struct Env **env) {
 	*input = s_null;
 
 	parse_sexp(str, &input, strlen(str));
+	p = input;
 #if EVAL
-	eval(input, env, &res);
-	print_sexp(res);
+	while (p) {
+		if (p->type == OBJ_NULL) {
+			break;
+		}
+
+		if (eval(p, env, &res)) {
+			fprintf(stderr, "parse_eval: eval failed\n");
+		} else {
+			if (res) {
+				print_sexp(res);
+				free_sexp(res);
+			} else {
+				printf("parse_eval: unspecified\n");
+			}
+		}
+
+		p = p->next;
+	}
 #endif
 	free_sexp(input);
 
