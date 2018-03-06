@@ -10,7 +10,9 @@ CFLAGS=-g\
        -DEVAL\
        -DMTRACE\
        -DDEBUG\
-       -DDEBUGEVAL\
+       -Wno-unused-function\
+       #-DDEBUG_ENV_UNBIND\
+       #-DDEBUGEVAL\
        #-DDEBUGPARSE\
        #-DDEBUGREAD\
        #-DDEBUGSEXP_END\

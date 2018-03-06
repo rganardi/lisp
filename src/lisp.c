@@ -49,8 +49,8 @@ static const struct Sexp s_null = {
 	.next = NULL
 };
 
-static void segfault_handler(int error);
 #if DEBUG
+static void segfault_handler(int error);
 static int dump_string(char *str, size_t n);
 #endif
 static int tok(char *str, char **start, char **end, char **next, size_t n);
@@ -59,21 +59,36 @@ static int sexp_end(char *str, char **end, size_t n);
 static int print_sexp(struct Sexp *s);
 static void free_sexp(struct Sexp *s);
 static int append_sexp(struct Sexp **dst, struct Sexp *src);
+static size_t len_sexp(struct Sexp *s);
 static int parse_sexp(char *str, struct Sexp **tree, size_t n);
+static int sexp_cp(struct Sexp *dst, struct Sexp *src);
 static int sexp_sub(struct Sexp **orig, struct Sexp *new);
+static int new_env_binding(struct Env **env, char *name, struct Sexp s_object);
+static int env_cp(struct Env **dst, struct Env src);
+static int env_rebind(struct Env **env, char *name, struct Sexp new_object);
+static int env_unbind(struct Env **env, char *name);
+static void free_env(struct Env *env);
+static int print_env(struct Env *env);
+static int lookup_env(struct Env *env, char *name, struct Sexp **s);
+static int new_closure(struct Closure **cl, struct Sexp *s, struct Env env);
+static int print_closure(struct Closure *cl);
+static void free_closure(struct Closure *cl);
 static int s_define(struct Sexp *s, struct Env **env);
+static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
+static int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
+static int sexp_env_replace(struct Sexp **orig, struct Env *env);
 static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res);
 static int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
 static int parse_eval(char *str, struct Env **env);
 static int read_line(FILE *stream, char *buf, size_t bufsiz);
 static int repl();
 
+#if DEBUG
 static void segfault_handler(int error) {
 	fprintf(stderr, "SEGFAULT, bad program!\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
-#if DEBUG
 static int dump_string(char *str, size_t n) {
 	size_t i = 0;
 	char *p = str;
@@ -355,7 +370,7 @@ static int append_sexp(struct Sexp **dst, struct Sexp *src) {
 	return 0;
 }
 
-size_t len_sexp(struct Sexp *s) {
+static size_t len_sexp(struct Sexp *s) {
 	size_t n = 0;
 	while (s) {
 		if (s->type == OBJ_NULL) {
@@ -520,7 +535,7 @@ static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	return 0;
 }
 
-int sexp_cp(struct Sexp *dst, struct Sexp *src) {
+static int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 	//dst should be a pointer to a memory allocated for struct Sexp
 	struct Sexp *s = src;
 	struct Sexp *d = dst;
@@ -604,7 +619,7 @@ static int sexp_sub(struct Sexp **orig, struct Sexp *new) {
 	return 0;
 }
 
-int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
+static int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	struct Env *e = NULL;
 	struct Sexp *s = NULL;
 	char *str = NULL;
@@ -643,7 +658,7 @@ int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	return 0;
 }
 
-int env_cp(struct Env **dst, struct Env src) {
+static int env_cp(struct Env **dst, struct Env src) {
 	//*dst should be a pointer to NULL
 	struct Env *s = &src;
 	struct Env *d = NULL;
@@ -693,7 +708,7 @@ int env_cp(struct Env **dst, struct Env src) {
 	return 0;
 }
 
-int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
+static int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	struct Env *e = *env;
 	struct Sexp *s = NULL;
 
@@ -724,7 +739,48 @@ int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	return 0;
 }
 
-void free_env(struct Env *env) {
+static int env_unbind(struct Env **env, char *name) {
+	struct Env *prev = NULL;
+	struct Env *e = *env;
+
+	while (strcmp(e->name, name)) {
+		prev = e;
+		e = e->next;
+		if (!e) {
+#if DEBUG_ENV_UNBIND
+			fprintf(stderr, "env_unbind: \"%s\" not found\n", name);
+#endif
+			return 1;
+		}
+	}
+
+#if DEBUG_ENV_UNBIND
+	printf("env_unbind: unbinding \"%s\"\n", e->name);
+	printf("before\n");
+	print_env(*env);
+#endif
+
+	if (!prev) {
+		//e is start
+		*env = e->next;
+		e->next = NULL;
+		free_env(e);
+	} else {
+		//e is middle
+		prev->next = e->next;
+		e->next = NULL;
+		free_env(e);
+	}
+
+#if DEBUG_ENV_UNBIND
+	printf("after\n");
+	print_env(*env);
+#endif
+
+	return 0;
+}
+
+static void free_env(struct Env *env) {
 	struct Env *p = env;
 	struct Env *pp = env;
 
@@ -741,7 +797,7 @@ void free_env(struct Env *env) {
 	return;
 }
 
-int print_env(struct Env *env) {
+static int print_env(struct Env *env) {
 	while (env) {
 #if DEBUG
 		printf("env->name\n");
@@ -760,7 +816,7 @@ int print_env(struct Env *env) {
 	return 0;
 }
 
-int lookup_env(struct Env *env, char *name, struct Sexp **s) {
+static int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	//return 1 when name is found in env, set s to point at the sexp
 	//return 0 otherwise
 	while (env) {
@@ -775,7 +831,7 @@ int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	return 0;
 }
 
-int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
+static int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
 	struct Sexp *p = NULL;
 	struct Closure *c = NULL;
 	struct Env *e = NULL;
@@ -832,7 +888,7 @@ int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
 	return 0;
 }
 
-int print_closure(struct Closure *cl) {
+static int print_closure(struct Closure *cl) {
 	printf("cl->arg\n");
 	if (print_sexp(cl->arg)) {
 		return 1;
@@ -850,7 +906,7 @@ int print_closure(struct Closure *cl) {
 	return 0;
 }
 
-void free_closure(struct Closure *cl) {
+static void free_closure(struct Closure *cl) {
 	free_sexp(cl->arg);
 	free_sexp(cl->body);
 	free_env(cl->env);
@@ -888,13 +944,13 @@ static int s_define(struct Sexp *s, struct Env **env) {
 	return 0;
 }
 
-static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
+static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	// s = ((lambda (x) body) args)
 	struct Sexp *p = NULL;
 	struct Sexp *arg = NULL;
 
 	if (len_sexp(s->pair) < 3) {
-		fprintf(stderr, "s_lambda: lambda expression must be of length at least 3\n");
+		fprintf(stderr, "s_beta_red: lambda expression must be of length at least 3\n");
 		return 1;
 	}
 
@@ -906,7 +962,7 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		case OBJ_ATOM:
 			//(lambda x body)
 			if (!(p = malloc(sizeof(struct Sexp)))) {
-				fprintf(stderr, "s_lambda: not enough memory\n");
+				fprintf(stderr, "s_beta_red: not enough memory\n");
 				return 1;
 			}
 
@@ -917,7 +973,7 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 						(((s->pair)->next)->atom),
 						*p)) {
 
-				fprintf(stderr, "s_lambda: failed to bind arguments to formal params\n");
+				fprintf(stderr, "s_beta_red: failed to bind arguments to formal params\n");
 				return 1;
 			}
 			free_sexp(p);
@@ -932,14 +988,14 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 					break;
 				} else if (p->type == OBJ_NULL
 						|| arg->type == OBJ_NULL) {
-					fprintf(stderr, "s_lambda: wrong number of arguments supplied\n");
+					fprintf(stderr, "s_beta_red: wrong number of arguments supplied\n");
 					return 1;
 				}
 
 				if (new_env_binding(&env,
 							p->atom,
 							*arg)) {
-					fprintf(stderr, "s_lambda: failed to bind arguments to formal params\n");
+					fprintf(stderr, "s_beta_red: failed to bind arguments to formal params\n");
 					return 1;
 				}
 
@@ -948,7 +1004,7 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			}
 			break;
 		default:
-			fprintf(stderr, "s_lambda: unrecognized lambda expression\n");
+			fprintf(stderr, "s_beta_red: unrecognized lambda expression\n");
 			return 1;
 	}
 
@@ -960,11 +1016,166 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		}
 
 		if (eval(p, &env, res)) {
-			fprintf(stderr, "s_lambda: eval failed\n");
+			fprintf(stderr, "s_beta_red: eval failed\n");
 			return 1;
 		}
 		p = p->next;
 	}
+
+	return 0;
+}
+
+static int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
+	//replaces all occurences of name with new
+	struct Sexp *s = *orig;
+	struct Sexp *prev = NULL;
+
+	while (s) {
+		switch (s->type) {
+			case OBJ_NULL:
+				return 0;
+			case OBJ_ATOM:
+				if (!(strcmp(s->atom, name))) {
+					if (sexp_sub(&s, new)) {
+						fprintf(stderr, "sexp_replace_all: failed to sub\n");
+						return 1;
+					}
+
+					if (prev) {
+						prev->next = s;
+					} else {
+						*orig = s;
+					}
+				}
+				break;
+			case OBJ_PAIR:
+				if (sexp_replace_all(&(s->pair), name, new)) {
+					fprintf(stderr, "sexp_replace_all: failed to recurse\n");
+					return 1;
+				}
+
+				break;
+			default:
+				fprintf(stderr, "sexp_replace_all: unknown sexp type\n");
+				return 1;
+				break;
+		}
+
+		prev = s;
+		s = s->next;
+	}
+
+	return 0;
+}
+
+static int sexp_env_replace(struct Sexp **orig, struct Env *env) {
+	struct Sexp *p = *orig;
+	struct Sexp *result = NULL;
+	struct Sexp *prev = NULL;
+
+	while (p) {
+		switch (p->type) {
+			case OBJ_NULL:
+				return 0;
+			case OBJ_ATOM:
+				if (lookup_env(env, p->atom, &result)) {
+					if (sexp_sub(&p, result)) {
+						fprintf(stderr, "sexp_env_replace: failed to replace\n");
+						return 1;
+					}
+
+					if (prev) {
+						prev->next = p;
+					} else {
+						*orig = p;
+					}
+				}
+				break;
+			case OBJ_PAIR:
+				if (sexp_env_replace(&(p->pair), env)) {
+					fprintf(stderr, "sexp_env_replace: failed to recurse\n");
+					return 1;
+				}
+				break;
+			default:
+				fprintf(stderr, "sexp_env_replace: unknown sexp type\n");
+				return 1;
+				break;
+		}
+
+		prev = p;
+		p = p->next;
+	}
+	return 0;
+}
+
+static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
+	//s = (lambda (args) body)
+	//s_lambda replaces all the variables in body (excluding formal params)
+	//		with what they're bound to in env
+	struct Sexp *p = s;
+	struct Sexp *tmp = NULL;
+
+	if (len_sexp(s) < 3) {
+		fprintf(stderr, "s_lambda: lambda expression must be of length at least 3\n");
+		return 1;
+	}
+
+	//remove args binding in env
+	switch ((s->next)->type) {
+		case OBJ_NULL:
+			//(lambda () body)
+			break;
+		case OBJ_ATOM:
+			//(lambda x body)
+			if (env_unbind(&env, (s->next)->atom)) {
+				fprintf(stderr, "s_lambda: can't remove args binding\n");
+				return 1;
+			}
+
+			break;
+		case OBJ_PAIR:
+			//(lambda (x ... y) body)
+			p = (s->next)->pair;
+			while (p) {
+				if (p->type == OBJ_NULL) {
+					break;
+				}
+#if DEBUG_S_LAMBDA
+				printf("unbinding %s\n", p->atom);
+#endif
+				env_unbind(&env, p->atom);
+				p = p->next;
+			}
+			break;
+		default:
+			fprintf(stderr, "s_lambda: malformed args\n");
+			return 1;
+			break;
+	}
+
+	if (!(tmp = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+		return 1;
+	}
+
+	if (sexp_cp(tmp, s)) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+	}
+
+	if (sexp_env_replace(&((tmp->next)->next), env)) {
+		fprintf(stderr, "s_lambda: failed to dereference\n");
+		return 1;
+	}
+
+	if (!((*res) = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+		return 1;
+	}
+
+	(*res)->type = OBJ_PAIR;
+	(*res)->pair = tmp;
+	(*res)->next = NULL;
 
 	return 0;
 }
@@ -1036,6 +1247,12 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 						*res = NULL;
 						return s_define(p, env);
 						break;
+					} else if (!(strcmp(p->atom, "lambda"))) {
+						return s_lambda(p, *env, res);
+						break;
+					} else if (!(strcmp(p->atom, "undef"))) {
+						return env_unbind(env, (p->next)->atom);
+						break;
 					}
 					//fall through;
 				case OBJ_PAIR:
@@ -1045,7 +1262,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #if DEBUGEVAL
 						printf("eval: lambda expression\n");
 #endif
-						return s_lambda(p, *env, res);
+						return s_beta_red(p, *env, res);
 						break;
 					}
 					//fall through;
