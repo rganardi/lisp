@@ -698,11 +698,11 @@ int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	struct Sexp *s = NULL;
 
 	while (strcmp(e->name, name)) {
+		e = e->next;
 		if (!e) {
 			fprintf(stderr, "env_rebind: \"%s\" not found\n", name);
 			return 1;
 		}
-		e = e->next;
 	}
 
 #if DEBUG_ENV_REBIND
