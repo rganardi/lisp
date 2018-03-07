@@ -1446,6 +1446,10 @@ static int repl() {
 		fprintf(stdout, "saved %s, read %s\n", str, buf);
 		printf("{%lu} in buf, {%lu} in str\n", strlen(buf), strlen(str));
 #endif
+		if (*buf == ';') {
+			continue;
+		}
+
 		append_string(&str, buf);
 #if DEBUGREAD
 		printf("read {%lu} %s\n", strlen(str), str);
@@ -1458,7 +1462,7 @@ static int repl() {
 #endif
 
 #if PARSE
-		if (!i && *str != ';') {
+		if (!i) {
 #else
 		if (0) {
 #endif
