@@ -85,8 +85,10 @@ static int repl();
 
 #if DEBUG
 static void segfault_handler(int error) {
-	fprintf(stderr, "SEGFAULT, bad program!\n");
-	exit(EXIT_FAILURE);
+	char buf[23] = "SEGFAULT, bad program\n";
+	write(STDERR_FILENO, buf, 23);
+	fflush(stdout);
+	_exit(EXIT_FAILURE);
 }
 
 static int dump_string(char *str, size_t n) {
@@ -238,12 +240,12 @@ static int sexp_end(char *str, char **end, size_t n) {
 
 static int print_sexp(struct Sexp *s) {
 	struct Sexp *p = s;
-#if DEBUG
+#if DEBUG_PRINT_SEXP
 	printf("(\n");
 #endif
 	while (p != NULL) {
 		switch (p->type) {
-#if DEBUG
+#if DEBUG_PRINT_SEXP
 			case OBJ_NULL:
 				printf("%p (null)\n", (void *) p);
 				break;
@@ -277,7 +279,7 @@ static int print_sexp(struct Sexp *s) {
 		//printf("sleep print\n");
 		//sleep(1);
 	}
-#if DEBUG
+#if DEBUG_PRINT_SEXP
 	printf(")\n");
 #endif
 
@@ -541,6 +543,12 @@ static int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 	struct Sexp *d = dst;
 	struct Sexp *dd = NULL;
 
+#if DEBUG_SEXP_CP
+	printf("sexp_cp: copying\n");
+	print_sexp(src);
+	printf("\n");
+#endif
+
 	while (s) {
 		d->type = s->type;
 		switch (s->type) {
@@ -561,14 +569,15 @@ static int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 				}
 				break;
 			case OBJ_PAIR:
-				if (!(d->pair = malloc(sizeof(struct Sexp)))) {
+				if (!(dd = malloc(sizeof(struct Sexp)))) {
 					fprintf(stderr, "sexp_cp: not enough memory\n");
 					return 1;
 				}
-				if (sexp_cp(d->pair, s->pair)) {
+				if (sexp_cp(dd, s->pair)) {
 					fprintf(stderr, "sexp_cp: failed to copy the sexp below\n");
 					return 1;
 				}
+				d->pair = dd;
 				break;
 			default:
 				fprintf(stderr, "sexp_cp: unknown sexp type\n");
@@ -915,6 +924,7 @@ static void free_closure(struct Closure *cl) {
 
 static int s_define(struct Sexp *s, struct Env **env) {
 	struct Sexp *p = NULL;
+	struct Sexp *tmp = NULL;
 
 	if (len_sexp(s) != 3) {
 		fprintf(stderr, "s_define: define takes exactly two args\n");
@@ -927,20 +937,28 @@ static int s_define(struct Sexp *s, struct Env **env) {
 		return 1;
 	}
 
+	if (eval(s->next, env, &tmp)) {
+		fprintf(stderr, "s_define: failed to eval the sexp\n");
+		return 1;
+	}
+
 	if (lookup_env(*env, s->atom, &p)) {
-		if (env_rebind(env, s->atom, *(s->next))) {
+		if (env_rebind(env, s->atom, *tmp)) {
 			fprintf(stderr, "s_define: rebind failed\n");
+			free_sexp(tmp);
 			return 1;
 		}
 	} else {
-		if (new_env_binding(env, s->atom, *(s->next))) {
+		if (new_env_binding(env, s->atom, *tmp)) {
 			fprintf(stderr, "s_define: new binding failed\n");
+			free_sexp(tmp);
 			return 1;
 		}
 	}
 #if DEBUG_DEFINE
 	print_env(*env);
 #endif
+	free_sexp(tmp);
 	return 0;
 }
 
@@ -948,9 +966,15 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	// s = ((lambda (x) body) args)
 	struct Sexp *p = NULL;
 	struct Sexp *arg = NULL;
+	struct Env *e = NULL;
 
 	if (len_sexp(s->pair) < 3) {
 		fprintf(stderr, "s_beta_red: lambda expression must be of length at least 3\n");
+		return 1;
+	}
+
+	if (env_cp(&e, *env)) {
+		fprintf(stderr, "s_beta_red: failed to copy env\n");
 		return 1;
 	}
 
@@ -963,17 +987,19 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			//(lambda x body)
 			if (!(p = malloc(sizeof(struct Sexp)))) {
 				fprintf(stderr, "s_beta_red: not enough memory\n");
+				free_env(e);
 				return 1;
 			}
 
 			p->type = OBJ_PAIR;
 			p->pair = ((s->pair)->next)->next;
 			p->next = NULL;
-			if (new_env_binding(&env,
+			if (new_env_binding(&e,
 						(((s->pair)->next)->atom),
 						*p)) {
 
 				fprintf(stderr, "s_beta_red: failed to bind arguments to formal params\n");
+				free_env(e);
 				return 1;
 			}
 			free_sexp(p);
@@ -989,13 +1015,15 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 				} else if (p->type == OBJ_NULL
 						|| arg->type == OBJ_NULL) {
 					fprintf(stderr, "s_beta_red: wrong number of arguments supplied\n");
+					free_env(e);
 					return 1;
 				}
 
-				if (new_env_binding(&env,
+				if (new_env_binding(&e,
 							p->atom,
 							*arg)) {
 					fprintf(stderr, "s_beta_red: failed to bind arguments to formal params\n");
+					free_env(e);
 					return 1;
 				}
 
@@ -1005,6 +1033,7 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			break;
 		default:
 			fprintf(stderr, "s_beta_red: unrecognized lambda expression\n");
+			free_env(e);
 			return 1;
 	}
 
@@ -1014,13 +1043,19 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		if (p->type == OBJ_NULL) {
 			break;
 		}
+		if (*res) {
+			free_sexp(*res);
+		}
 
-		if (eval(p, &env, res)) {
+		if (eval(p, &e, res)) {
 			fprintf(stderr, "s_beta_red: eval failed\n");
+			free_env(e);
 			return 1;
 		}
 		p = p->next;
 	}
+
+	free_env(e);
 
 	return 0;
 }
@@ -1115,6 +1150,7 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	//		with what they're bound to in env
 	struct Sexp *p = s;
 	struct Sexp *tmp = NULL;
+	struct Env *e = NULL;
 
 	if (len_sexp(s) < 3) {
 		fprintf(stderr, "s_lambda: lambda expression must be of length at least 3\n");
@@ -1122,14 +1158,20 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	}
 
 	//remove args binding in env
+	if (env_cp(&e, *env)) {
+		fprintf(stderr, "s_lambda: failed to copy env\n");
+		return 1;
+	}
+
 	switch ((s->next)->type) {
 		case OBJ_NULL:
 			//(lambda () body)
 			break;
 		case OBJ_ATOM:
 			//(lambda x body)
-			if (env_unbind(&env, (s->next)->atom)) {
+			if (env_unbind(&e, (s->next)->atom)) {
 				fprintf(stderr, "s_lambda: can't remove args binding\n");
+				free_env(e);
 				return 1;
 			}
 
@@ -1144,12 +1186,13 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 #if DEBUG_S_LAMBDA
 				printf("unbinding %s\n", p->atom);
 #endif
-				env_unbind(&env, p->atom);
+				env_unbind(&e, p->atom);
 				p = p->next;
 			}
 			break;
 		default:
 			fprintf(stderr, "s_lambda: malformed args\n");
+			free_env(e);
 			return 1;
 			break;
 	}
@@ -1161,12 +1204,19 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 
 	if (sexp_cp(tmp, s)) {
 		fprintf(stderr, "s_lambda: not enough memory to store result\n");
-	}
-
-	if (sexp_env_replace(&((tmp->next)->next), env)) {
-		fprintf(stderr, "s_lambda: failed to dereference\n");
+		free(tmp);
+		free_env(e);
 		return 1;
 	}
+
+	if (sexp_env_replace(&((tmp->next)->next), e)) {
+		fprintf(stderr, "s_lambda: failed to dereference\n");
+		free(tmp);
+		free_env(e);
+		return 1;
+	}
+
+	free_env(e);
 
 	if (!((*res) = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "s_lambda: not enough memory to store result\n");
@@ -1208,9 +1258,6 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			}
 
 			if (lookup_env(*env, s->atom, &result)) {
-#if DEBUGEVAL
-				print_sexp(result);
-#endif
 				if (!(*res = malloc(sizeof(struct Sexp)))) {
 					fprintf(stderr, "eval: failed to alloc after lookup\n");
 					return 1;
@@ -1220,7 +1267,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 					fprintf(stderr, "eval: failed to copy result after lookup\n");
 					return 1;
 				}
-#ifndef DEBUG
+#ifndef DEBUG_PRINT_SEXP
 				printf("\n");
 #endif
 				return 0;
@@ -1351,6 +1398,7 @@ static int parse_eval(char *str, struct Env **env) {
 #if EVAL
 	p = input;
 	while (p) {
+		printf("parse_eval: new token\n");
 		if (p->type == OBJ_NULL) {
 			break;
 		}
