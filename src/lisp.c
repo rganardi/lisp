@@ -44,54 +44,54 @@ struct Closure {
 	struct Env *env;
 };
 
-static const struct Sexp s_null = {
+const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
 };
 
 #if DEBUG
-static void segfault_handler(int error);
-static int dump_string(char *str, size_t n);
+void segfault_handler(int error);
+int dump_string(char *str, size_t n);
 #endif
-static int tok(char *str, char **start, char **end, char **next, size_t n);
-static int check_if_sexp(char *str);
-static int sexp_end(char *str, char **end, size_t n);
-static int print_sexp(struct Sexp *s);
-static void free_sexp(struct Sexp *s);
-static int append_sexp(struct Sexp **dst, struct Sexp *src);
-static size_t len_sexp(struct Sexp *s);
-static int parse_sexp(char *str, struct Sexp **tree, size_t n);
-static int sexp_cp(struct Sexp *dst, struct Sexp *src);
-static int sexp_sub(struct Sexp **orig, struct Sexp *new);
-static int new_env_binding(struct Env **env, char *name, struct Sexp s_object);
-static int env_cp(struct Env **dst, struct Env src);
-static int env_rebind(struct Env **env, char *name, struct Sexp new_object);
-static int env_unbind(struct Env **env, char *name);
-static void free_env(struct Env *env);
-static int print_env(struct Env *env);
-static int lookup_env(struct Env *env, char *name, struct Sexp **s);
-static int new_closure(struct Closure **cl, struct Sexp *s, struct Env env);
-static int print_closure(struct Closure *cl);
-static void free_closure(struct Closure *cl);
-static int s_define(struct Sexp *s, struct Env **env);
-static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
-static int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
-static int sexp_env_replace(struct Sexp **orig, struct Env *env);
-static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res);
-static int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
-static int parse_eval(char *str, struct Env **env);
-static int read_line(FILE *stream, char *buf, size_t bufsiz);
-static int repl();
+int tok(char *str, char **start, char **end, char **next, size_t n);
+int check_if_sexp(char *str);
+int sexp_end(char *str, char **end, size_t n);
+int print_sexp(struct Sexp *s);
+void free_sexp(struct Sexp *s);
+int append_sexp(struct Sexp **dst, struct Sexp *src);
+size_t len_sexp(struct Sexp *s);
+int parse_sexp(char *str, struct Sexp **tree, size_t n);
+int sexp_cp(struct Sexp *dst, struct Sexp *src);
+int sexp_sub(struct Sexp **orig, struct Sexp *new);
+int new_env_binding(struct Env **env, char *name, struct Sexp s_object);
+int env_cp(struct Env **dst, struct Env src);
+int env_rebind(struct Env **env, char *name, struct Sexp new_object);
+int env_unbind(struct Env **env, char *name);
+void free_env(struct Env *env);
+int print_env(struct Env *env);
+int lookup_env(struct Env *env, char *name, struct Sexp **s);
+int new_closure(struct Closure **cl, struct Sexp *s, struct Env env);
+int print_closure(struct Closure *cl);
+void free_closure(struct Closure *cl);
+int s_define(struct Sexp *s, struct Env **env);
+int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
+int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
+int sexp_env_replace(struct Sexp **orig, struct Env *env);
+int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res);
+int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
+int parse_eval(char *str, struct Env **env);
+int read_line(FILE *stream, char *buf, size_t bufsiz);
+int repl();
 
 #if DEBUG
-static void segfault_handler(int error) {
+void segfault_handler(int error) {
 	char buf[23] = "SEGFAULT, bad program\n";
 	write(STDERR_FILENO, buf, 23);
 	fflush(stdout);
 	_exit(EXIT_FAILURE);
 }
 
-static int dump_string(char *str, size_t n) {
+int dump_string(char *str, size_t n) {
 	size_t i = 0;
 	char *p = str;
 
@@ -103,7 +103,7 @@ static int dump_string(char *str, size_t n) {
 }
 #endif
 
-static int match(char c, const char *bytes) {
+int match(char c, const char *bytes) {
 	const char *p = NULL;
 	for (p = bytes; *p != '\0'; p++) {
 		if (*p == c) {
@@ -113,7 +113,7 @@ static int match(char c, const char *bytes) {
 	return 0;
 }
 
-static int tok(char *str, char **start, char **end, char **next, size_t n) {
+int tok(char *str, char **start, char **end, char **next, size_t n) {
 	char *p = str;
 	size_t i = 0;
 
@@ -151,7 +151,7 @@ static int tok(char *str, char **start, char **end, char **next, size_t n) {
 	return 1;
 }
 
-static int check_if_sexp(char *str) {
+int check_if_sexp(char *str) {
 	while (match(*str, SEXP_DELIM)) {
 		str++;
 	}
@@ -162,7 +162,7 @@ static int check_if_sexp(char *str) {
 	}
 }
 
-static int sexp_end(char *str, char **end, size_t n) {
+int sexp_end(char *str, char **end, size_t n) {
 	/* find the end of the sexp at the start of str */
 	char *p = str; //scan through the string
 	char *w = str; //scan through words
@@ -238,7 +238,7 @@ static int sexp_end(char *str, char **end, size_t n) {
 	return 1;
 }
 
-static int print_sexp(struct Sexp *s) {
+int print_sexp(struct Sexp *s) {
 	struct Sexp *p = s;
 #if DEBUG_PRINT_SEXP
 	printf("(\n");
@@ -286,7 +286,7 @@ static int print_sexp(struct Sexp *s) {
 	return 0;
 }
 
-static void free_sexp(struct Sexp *s) {
+void free_sexp(struct Sexp *s) {
 	/* free a (null) terminated Sexp */
 	struct Sexp *p = s;
 	struct Sexp *pp = s;
@@ -314,7 +314,7 @@ static void free_sexp(struct Sexp *s) {
 	return;
 }
 
-static int append_sexp(struct Sexp **dst, struct Sexp *src) {
+int append_sexp(struct Sexp **dst, struct Sexp *src) {
 	struct Sexp *p = *dst;
 	struct Sexp *pp = *dst;
 
@@ -372,7 +372,7 @@ static int append_sexp(struct Sexp **dst, struct Sexp *src) {
 	return 0;
 }
 
-static size_t len_sexp(struct Sexp *s) {
+size_t len_sexp(struct Sexp *s) {
 	size_t n = 0;
 	while (s) {
 		if (s->type == OBJ_NULL) {
@@ -384,7 +384,7 @@ static size_t len_sexp(struct Sexp *s) {
 	return n;
 }
 
-static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
+int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	/* args:
 	 *	char *str		= string to be parsed
 	 *	struct Sexp **tree	= tree to store the parsed Sexp
@@ -537,7 +537,7 @@ static int parse_sexp(char *str, struct Sexp **tree, size_t n) {
 	return 0;
 }
 
-static int sexp_cp(struct Sexp *dst, struct Sexp *src) {
+int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 	//dst should be a pointer to a memory allocated for struct Sexp
 	struct Sexp *s = src;
 	struct Sexp *d = dst;
@@ -597,7 +597,7 @@ static int sexp_cp(struct Sexp *dst, struct Sexp *src) {
 	return 0;
 }
 
-static int sexp_sub(struct Sexp **orig, struct Sexp *new) {
+int sexp_sub(struct Sexp **orig, struct Sexp *new) {
 	//subs in the Sexp pointed to at orig by new
 	struct Sexp *s = NULL;
 
@@ -628,7 +628,7 @@ static int sexp_sub(struct Sexp **orig, struct Sexp *new) {
 	return 0;
 }
 
-static int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
+int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	struct Env *e = NULL;
 	struct Sexp *s = NULL;
 	char *str = NULL;
@@ -667,7 +667,7 @@ static int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 	return 0;
 }
 
-static int env_cp(struct Env **dst, struct Env src) {
+int env_cp(struct Env **dst, struct Env src) {
 	//*dst should be a pointer to NULL
 	struct Env *s = &src;
 	struct Env *d = NULL;
@@ -717,7 +717,7 @@ static int env_cp(struct Env **dst, struct Env src) {
 	return 0;
 }
 
-static int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
+int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	struct Env *e = *env;
 	struct Sexp *s = NULL;
 
@@ -748,7 +748,7 @@ static int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 	return 0;
 }
 
-static int env_unbind(struct Env **env, char *name) {
+int env_unbind(struct Env **env, char *name) {
 	struct Env *prev = NULL;
 	struct Env *e = *env;
 
@@ -789,7 +789,7 @@ static int env_unbind(struct Env **env, char *name) {
 	return 0;
 }
 
-static void free_env(struct Env *env) {
+void free_env(struct Env *env) {
 	struct Env *p = env;
 	struct Env *pp = env;
 
@@ -806,7 +806,7 @@ static void free_env(struct Env *env) {
 	return;
 }
 
-static int print_env(struct Env *env) {
+int print_env(struct Env *env) {
 	while (env) {
 #if DEBUG
 		printf("env->name\n");
@@ -825,7 +825,7 @@ static int print_env(struct Env *env) {
 	return 0;
 }
 
-static int lookup_env(struct Env *env, char *name, struct Sexp **s) {
+int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	//return 1 when name is found in env, set s to point at the sexp
 	//return 0 otherwise
 	while (env) {
@@ -840,7 +840,7 @@ static int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	return 0;
 }
 
-static int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
+int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
 	struct Sexp *p = NULL;
 	struct Closure *c = NULL;
 	struct Env *e = NULL;
@@ -897,7 +897,7 @@ static int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
 	return 0;
 }
 
-static int print_closure(struct Closure *cl) {
+int print_closure(struct Closure *cl) {
 	printf("cl->arg\n");
 	if (print_sexp(cl->arg)) {
 		return 1;
@@ -915,14 +915,14 @@ static int print_closure(struct Closure *cl) {
 	return 0;
 }
 
-static void free_closure(struct Closure *cl) {
+void free_closure(struct Closure *cl) {
 	free_sexp(cl->arg);
 	free_sexp(cl->body);
 	free_env(cl->env);
 	free(cl);
 }
 
-static int s_define(struct Sexp *s, struct Env **env) {
+int s_define(struct Sexp *s, struct Env **env) {
 	struct Sexp *p = NULL;
 	struct Sexp *tmp = NULL;
 
@@ -962,7 +962,7 @@ static int s_define(struct Sexp *s, struct Env **env) {
 	return 0;
 }
 
-static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
+int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	// s = ((lambda (x) body) args)
 	struct Sexp *p = NULL;
 	struct Sexp *arg = NULL;
@@ -1060,7 +1060,7 @@ static int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	return 0;
 }
 
-static int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
+int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
 	//replaces all occurences of name with new
 	struct Sexp *s = *orig;
 	struct Sexp *prev = NULL;
@@ -1103,7 +1103,7 @@ static int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
 	return 0;
 }
 
-static int sexp_env_replace(struct Sexp **orig, struct Env *env) {
+int sexp_env_replace(struct Sexp **orig, struct Env *env) {
 	struct Sexp *p = *orig;
 	struct Sexp *result = NULL;
 	struct Sexp *prev = NULL;
@@ -1144,7 +1144,7 @@ static int sexp_env_replace(struct Sexp **orig, struct Env *env) {
 	return 0;
 }
 
-static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
+int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	//s = (lambda (args) body)
 	//s_lambda replaces all the variables in body (excluding formal params)
 	//		with what they're bound to in env
@@ -1230,7 +1230,7 @@ static int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	return 0;
 }
 
-static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
+int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	//only eval the first element of s.
 	//on return, if *res != NULL, then you should free it.
 	struct Sexp *p = s;
@@ -1377,7 +1377,7 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	return 0;
 }
 
-static int parse_eval(char *str, struct Env **env) {
+int parse_eval(char *str, struct Env **env) {
 	struct Sexp *input = NULL;
 #if EVAL
 	struct Sexp *p = NULL;
@@ -1425,7 +1425,7 @@ static int parse_eval(char *str, struct Env **env) {
 	return 0;
 }
 
-static int read_line(FILE *stream, char *buf, size_t bufsiz) {
+int read_line(FILE *stream, char *buf, size_t bufsiz) {
 	// read at most bufsize chars from fd into buf (including '\0')
 	size_t i = 0;
 	int c = '\0';
@@ -1444,7 +1444,7 @@ static int read_line(FILE *stream, char *buf, size_t bufsiz) {
 	return 0;
 }
 
-static size_t append_string(char **dest, const char *src) {
+size_t append_string(char **dest, const char *src) {
 	char *dst = *dest;
 	size_t n = strlen(dst) + strlen(src) + 1;
 
@@ -1469,7 +1469,7 @@ static size_t append_string(char **dest, const char *src) {
 	return n;
 }
 
-static int repl() {
+int repl() {
 	char buf[BUFFER_SIZE];
 	char *str = NULL;
 #if PARSE || DEBUGPARSE
