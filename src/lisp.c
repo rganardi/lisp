@@ -1250,6 +1250,13 @@ static int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 					} else if (!(strcmp(p->atom, "lambda"))) {
 						return s_lambda(p, *env, res);
 						break;
+					} else if (!(strcmp(p->atom, "quote"))) {
+						if (!(*res = malloc(sizeof(struct Sexp)))) {
+							fprintf(stderr, "eval: not enough memory\n");
+							return 1;
+						}
+						return sexp_cp(*res, p->next);
+						break;
 					} else if (!(strcmp(p->atom, "undef"))) {
 						return env_unbind(env, (p->next)->atom);
 						break;
