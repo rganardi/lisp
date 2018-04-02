@@ -808,7 +808,7 @@ void free_env(struct Env *env) {
 
 int print_env(struct Env *env) {
 	while (env) {
-#if DEBUG
+#if DEBUG_PRINT_ENV
 		printf("env->name\n");
 		dump_string(env->name, strlen(env->name)+1);
 #else
@@ -937,6 +937,9 @@ int s_define(struct Sexp *s, struct Env **env) {
 		return 1;
 	}
 
+#if DEBUG_DEFINE
+	printf("s_define: eval atom\n");
+#endif
 	if (eval(s->next, env, &tmp)) {
 		fprintf(stderr, "s_define: failed to eval the sexp\n");
 		return 1;
@@ -957,6 +960,7 @@ int s_define(struct Sexp *s, struct Env **env) {
 	}
 #if DEBUG_DEFINE
 	print_env(*env);
+	printf("s_define: quitting\n");
 #endif
 	free_sexp(tmp);
 	return 0;
@@ -973,10 +977,18 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		return 1;
 	}
 
+#if DEBUG_S_BETA_RED
+	printf("s_beta_red: copy env\n");
+#endif
 	if (env_cp(&e, *env)) {
 		fprintf(stderr, "s_beta_red: failed to copy env\n");
 		return 1;
 	}
+#if DEBUG_S_BETA_RED
+	printf("s_beta_red: copy env done, got this\n");
+	print_env(e);
+	printf("s_beta_red: bind args to formal params\n");
+#endif
 
 	//do beta reduction
 	switch (((s->pair)->next)->type) {
@@ -1036,6 +1048,12 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			free_env(e);
 			return 1;
 	}
+#if DEBUG_S_BETA_RED
+	printf("s_beta_red: binding done\n");
+	printf("s_beta_red: current env is\n");
+	print_env(e);
+	printf("s_beta_red: do eval\n");
+#endif
 
 	//eval body
 	p = (((s->pair)->next)->next);
@@ -1046,7 +1064,10 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		if (*res) {
 			free_sexp(*res);
 		}
-
+#if DEBUG_S_BETA_RED
+		printf("s_beta_red: current env is\n");
+		print_env(e);
+#endif
 		if (eval(p, &e, res)) {
 			fprintf(stderr, "s_beta_red: eval failed\n");
 			free_env(e);
@@ -1149,7 +1170,6 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	//s_lambda replaces all the variables in body (excluding formal params)
 	//		with what they're bound to in env
 	struct Sexp *p = s;
-	struct Sexp *tmp = NULL;
 	struct Env *e = NULL;
 
 	if (len_sexp(s) < 3) {
@@ -1158,10 +1178,18 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	}
 
 	//remove args binding in env
+#if DEBUG_S_LAMBDA
+	printf("s_lambda: copying this env\n");
+	print_env(env);
+	printf("s_lambda: copying\n");
+#endif
 	if (env_cp(&e, *env)) {
 		fprintf(stderr, "s_lambda: failed to copy env\n");
 		return 1;
 	}
+#if DEBUG_S_LAMBDA
+	printf("s_lambda: done copy env\n");
+#endif
 
 	switch ((s->next)->type) {
 		case OBJ_NULL:
@@ -1197,36 +1225,47 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			break;
 	}
 
-	if (!(tmp = malloc(sizeof(struct Sexp)))) {
-		fprintf(stderr, "s_lambda: not enough memory to store result\n");
-		return 1;
-	}
-
-	if (sexp_cp(tmp, s)) {
-		fprintf(stderr, "s_lambda: not enough memory to store result\n");
-		free(tmp);
-		free_env(e);
-		return 1;
-	}
-
-	if (sexp_env_replace(&((tmp->next)->next), e)) {
-		fprintf(stderr, "s_lambda: failed to dereference\n");
-		free(tmp);
-		free_env(e);
-		return 1;
-	}
-
-	free_env(e);
-
 	if (!((*res) = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "s_lambda: not enough memory to store result\n");
 		return 1;
 	}
 
 	(*res)->type = OBJ_PAIR;
-	(*res)->pair = tmp;
-	(*res)->next = NULL;
 
+	if (!((*res)->pair = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+		free(*res);
+		return 1;
+	}
+
+	if (sexp_cp((*res)->pair, s)) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+		free_sexp(*res);
+		free_env(e);
+		return 1;
+	}
+
+	if (sexp_env_replace(&((((*res)->pair)->next)->next), e)) {
+		fprintf(stderr, "s_lambda: failed to dereference\n");
+		free_sexp(*res);
+		free_env(e);
+		return 1;
+	}
+
+	free_env(e);
+
+	if (!((*res)->next = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "s_lambda: not enough memory to store result\n");
+		free_sexp(*res);
+		return 1;
+	}
+	*((*res)->next) = s_null;
+
+#if DEBUG_S_LAMBDA
+	printf("s_lambda: returning\n");
+	print_sexp(*res);
+	printf("s_lambda: quitting\n");
+#endif
 	return 0;
 }
 
@@ -1239,6 +1278,8 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 #if DEBUGEVAL
 	printf("in eval\n");
 	print_sexp(s);
+	printf("with env\n");
+	print_env(*env);
 #endif
 
 	switch (s->type) {
@@ -1263,12 +1304,19 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 					return 1;
 				}
 
+#if DEBUGEVAL
+				printf("eval: got result\n");
+				print_sexp(result);
+#endif
+
 				if (sexp_cp(*res, result)) {
 					fprintf(stderr, "eval: failed to copy result after lookup\n");
+					free(*res);
 					return 1;
 				}
-#ifndef DEBUG_PRINT_SEXP
-				printf("\n");
+
+#if DEBUGEVAL
+				printf("eval: lookup done\n");
 #endif
 				return 0;
 			} else {
@@ -1292,9 +1340,15 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 				case OBJ_ATOM:
 					if (!(strcmp(p->atom, "define"))) {
 						*res = NULL;
+#if DEBUGEVAL
+						printf("eval: define expression\n");
+#endif
 						return s_define(p, env);
 						break;
 					} else if (!(strcmp(p->atom, "lambda"))) {
+#if DEBUGEVAL
+						printf("eval: lambda expression\n");
+#endif
 						return s_lambda(p, *env, res);
 						break;
 					} else if (!(strcmp(p->atom, "quote"))) {
@@ -1302,6 +1356,9 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 							fprintf(stderr, "eval: not enough memory\n");
 							return 1;
 						}
+#if DEBUGEVAL
+						printf("eval: quote quitting\n");
+#endif
 						return sexp_cp(*res, p->next);
 						break;
 					} else if (!(strcmp(p->atom, "undef"))) {
@@ -1314,7 +1371,7 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 						//lambda expression
 						//do beta reduction
 #if DEBUGEVAL
-						printf("eval: lambda expression\n");
+						printf("eval: beta reduction\n");
 #endif
 						return s_beta_red(p, *env, res);
 						break;
@@ -1338,11 +1395,18 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 							return 1;
 						} else {
 							//sub in
+#if DEBUGEVAL
+							printf("eval: subbing in result\n");
+#endif
 							if (sexp_sub(&p, result)) {
 								fprintf(stderr, "eval: substitution failed\n");
 								return 1;
 							}
 							free_sexp(result);
+							result = NULL;
+#if DEBUGEVAL
+							printf("eval: subbing in done\n");
+#endif
 
 							if (pp) {
 								pp->next = p;
@@ -1398,7 +1462,9 @@ int parse_eval(char *str, struct Env **env) {
 #if EVAL
 	p = input;
 	while (p) {
+#if DEBUG_PARSE_EVAL
 		printf("parse_eval: new token\n");
+#endif
 		if (p->type == OBJ_NULL) {
 			break;
 		}
@@ -1407,8 +1473,11 @@ int parse_eval(char *str, struct Env **env) {
 			fprintf(stderr, "parse_eval: eval failed\n");
 		} else {
 			if (res) {
+#if DEBUG_PARSE_EVAL
+				printf("parse_eval: result is\n");
+#endif
 				print_sexp(res);
-#ifndef DEBUG
+#ifndef DEBUG_PRINT_SEXP
 				printf("\n");
 #endif
 				free_sexp(res);

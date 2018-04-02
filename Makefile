@@ -11,8 +11,15 @@ CFLAGS=-g\
        -DMTRACE\
        -DDEBUG\
        -Wno-unused-function\
-       #-DDEBUG_ENV_UNBIND\
        #-DDEBUGEVAL\
+       #-DDEBUG_DEFINE\
+       #-DDEBUG_S_BETA_RED\
+       #-DDEBUG_S_LAMBDA\
+       #-DDEBUG_SEXP_CP\
+       #-DDEBUG_PARSE_EVAL\
+       #-DDEBUG_PRINT_SEXP\
+       #-rdynamic\
+       #-DDEBUG_ENV_UNBIND\
        #-DDEBUGPARSE\
        #-DDEBUGREAD\
        #-DDEBUGSEXP_END\
