@@ -1003,7 +1003,7 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			}
 
 			p->type = OBJ_PAIR;
-			p->pair = ((s->pair)->next)->next;
+			p->pair = s->next;
 			p->next = NULL;
 			if (new_env_binding(&e,
 						(((s->pair)->next)->atom),
@@ -1196,12 +1196,7 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			break;
 		case OBJ_ATOM:
 			//(lambda x body)
-			if (env_unbind(&e, (s->next)->atom)) {
-				fprintf(stderr, "s_lambda: can't remove args binding\n");
-				free_env(e);
-				return 1;
-			}
-
+			env_unbind(&e, (s->next)->atom);
 			break;
 		case OBJ_PAIR:
 			//(lambda (x ... y) body)
