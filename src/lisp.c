@@ -637,6 +637,12 @@ int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 		return 1;
 	}
 
+	if (!(s_object.next = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
+		return 1;
+	}
+	*(s_object.next) = s_null;
+
 	if (!(s = malloc(sizeof(struct Sexp)))) {
 		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
 		return 1;
@@ -646,6 +652,8 @@ int new_env_binding(struct Env **env, char *name, struct Sexp s_object) {
 		fprintf(stderr, "new_env_binding: failed to copy env\n");
 		return 1;
 	}
+
+	free_sexp(s_object.next);
 
 	if (!(str = malloc(sizeof(char) * (strlen(name)+1)))) {
 		fprintf(stderr, "new_env_binding: can't allocate memory for new environment\n");
