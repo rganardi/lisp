@@ -262,12 +262,12 @@ int print_sexp(struct Sexp *s) {
 			case OBJ_NULL:
 				break;
 			case OBJ_ATOM:
-				printf("\"%s\" ", p->atom);
+				printf("%s", p->atom);
 				break;
 			case OBJ_PAIR:
 				printf("(");
 				print_sexp(p->pair);
-				printf(") ");
+				printf(")");
 				break;
 			default:
 				printf("unknown sexp type\n");
@@ -276,8 +276,7 @@ int print_sexp(struct Sexp *s) {
 		}
 
 		p = p->next;
-		//printf("sleep print\n");
-		//sleep(1);
+		if (p && p->type != OBJ_NULL) printf(" ");
 	}
 #if DEBUG_PRINT_SEXP
 	printf(")\n");
