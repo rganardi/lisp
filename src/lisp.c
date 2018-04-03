@@ -1275,6 +1275,15 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	printf("with env\n");
 	print_env(*env);
 #endif
+#if TRACE
+	printf("trace: ");
+	p = s->next;
+	s->next = NULL;
+	print_sexp(s);
+	s->next = p;
+	p = s;
+	printf("\n");
+#endif
 
 	switch (s->type) {
 		case OBJ_NULL:
