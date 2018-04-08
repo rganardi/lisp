@@ -978,6 +978,8 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	struct Sexp *p = NULL;
 	struct Sexp *arg = NULL;
 	struct Env *e = NULL;
+	struct Sexp *pp = NULL;
+	struct Sexp *args = NULL;
 
 	if (len_sexp(s->pair) < 3) {
 		fprintf(stderr, "s_beta_red: lambda expression must be of length at least 3\n");
@@ -1004,6 +1006,49 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			break;
 		case OBJ_ATOM:
 			//(lambda x body)
+			if (!(args = malloc(sizeof(struct Sexp)))) {
+				fprintf(stderr, "s_beta_red: failed to alloc for args\n");
+				free_env(e);
+				return 1;
+			}
+
+			if (sexp_cp(args, s->next)) {
+				fprintf(stderr, "s_beta_red: failed to make copy of args\n");
+				free_env(e);
+				return 1;
+			}
+			arg = args;
+			pp = NULL;
+
+			while (arg) {
+				if (arg->type == OBJ_NULL) {
+					break;
+				}
+
+				if (eval(arg, &e, res)) {
+					fprintf(stderr, "s_beta_red: eval failed\n");
+					free_env(e);
+					return 1;
+				}
+
+				if ((*res) && sexp_sub(&arg, *res)) {
+					fprintf(stderr, "s_beta_red: sub in failed\n");
+					free_env(e);
+					return 1;
+				}
+
+				free_sexp(*res);
+				*res = NULL;
+
+				if (pp) {
+					pp->next = arg;
+				} else {
+					args = arg;
+				}
+				pp = arg;
+				arg = arg->next;
+			}
+
 			if (!(p = malloc(sizeof(struct Sexp)))) {
 				fprintf(stderr, "s_beta_red: not enough memory\n");
 				free_env(e);
@@ -1011,8 +1056,9 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 			}
 
 			p->type = OBJ_PAIR;
-			p->pair = s->next;
+			p->pair = args;
 			p->next = NULL;
+
 			if (new_env_binding(&e,
 						(((s->pair)->next)->atom),
 						*p)) {
@@ -1038,12 +1084,23 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 					return 1;
 				}
 
-				if (new_env_binding(&e,
+				if (eval(arg, &e, res)) {
+					fprintf(stderr, "s_beta_red: eval failed\n");
+					free_env(e);
+					return 1;
+				}
+
+				if ((*res) && new_env_binding(&e,
 							p->atom,
-							*arg)) {
+							*(*res))) {
 					fprintf(stderr, "s_beta_red: failed to bind arguments to formal params\n");
 					free_env(e);
 					return 1;
+				}
+
+				if (*res) {
+					free_sexp(*res);
+					*res = NULL;
 				}
 
 				p = p->next;
@@ -1275,7 +1332,6 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	//only eval the first element of s.
 	//on return, if *res != NULL, then you should free it.
 	struct Sexp *p = s;
-	struct Sexp *pp = NULL;
 	struct Sexp *result = NULL;
 #if DEBUGEVAL
 	printf("in eval\n");
@@ -1398,40 +1454,31 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 					printf("eval: function call\n");
 #endif
 
-					while (p) {
-						if (p->type == OBJ_NULL) {
-							break;
-						}
-
-						if (eval(p, env, &result)) {
-							printf("eval: failed to eval\n");
-							print_sexp(p);
-							return 1;
-						} else {
-							//sub in
-#if DEBUGEVAL
-							printf("eval: subbing in result\n");
-#endif
-							if (sexp_sub(&p, result)) {
-								fprintf(stderr, "eval: substitution failed\n");
-								return 1;
-							}
-							free_sexp(result);
-							result = NULL;
-#if DEBUGEVAL
-							printf("eval: subbing in done\n");
-#endif
-
-							if (pp) {
-								pp->next = p;
-							} else {
-								s->pair = p;
-							}
-							pp = p;
-						}
-
-						p = p->next;
+					if (p->type == OBJ_NULL) {
+						break;
 					}
+
+					if (eval(p, env, &result)) {
+						printf("eval: failed to eval\n");
+						print_sexp(p);
+						return 1;
+					} else {
+						//sub in
+#if DEBUGEVAL
+						printf("eval: subbing in result\n");
+#endif
+						if (sexp_sub(&p, result)) {
+							fprintf(stderr, "eval: substitution failed\n");
+							return 1;
+						}
+						free_sexp(result);
+						result = NULL;
+#if DEBUGEVAL
+						printf("eval: subbing in done\n");
+#endif
+						s->pair = p;
+					}
+
 
 #if DEBUGEVAL
 					printf("after sub:\n");

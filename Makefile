@@ -8,12 +8,13 @@ CFLAGS=-g\
        -Wall\
        -DPARSE\
        -DEVAL\
-       -DMTRACE\
        -DDEBUG\
        -Wno-unused-function\
+       -DTRACE\
+       #-DMTRACE\
+       #-DDEBUG_S_BETA_RED\
        #-DDEBUGEVAL\
        #-DDEBUG_DEFINE\
-       #-DDEBUG_S_BETA_RED\
        #-DDEBUG_S_LAMBDA\
        #-DDEBUG_SEXP_CP\
        #-DDEBUG_PARSE_EVAL\
