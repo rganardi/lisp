@@ -818,12 +818,12 @@ int print_env(struct Env *env) {
 #if DEBUG_PRINT_ENV
 		printf("env->name\n");
 		dump_string(env->name, strlen(env->name)+1);
-#else
-		printf("env->name\t%s\n", env->name);
-#endif
 		printf("env->s_object\n");
 		print_sexp(env->s_object);
-#ifndef DEBUG
+		printf("\n");
+#else
+		printf("%s\t->\t", env->name);
+		print_sexp(env->s_object);
 		printf("\n");
 #endif
 
@@ -1290,6 +1290,9 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	print_sexp(s);
 	s->next = p;
 	p = s;
+	printf("\n");
+	printf("with env\n");
+	print_env(*env);
 	printf("\n");
 #endif
 
