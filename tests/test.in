@@ -1,0 +1,11 @@
+;try to segfault
+(define 0 (quote a))
+(define add1
+  (lambda (x)
+    (lambda () x)))
+(define 2 (add1 (add1 0)))
+2
+(2)
+;((2))
+(add1 0)
+;((add1 0))

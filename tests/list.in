@@ -1,0 +1,3 @@
+(define list (lambda x x))
+
+(list (quote a) (quote b) list (quote 0))

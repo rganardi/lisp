@@ -1,0 +1,10 @@
+(define 0 (quote zero))
+0
+(define 1 (quote one))
+1
+0
+(define 0 1)
+0
+(define 1 (quote a))
+0
+1

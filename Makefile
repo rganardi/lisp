@@ -1,8 +1,9 @@
-PROGNAME=lisp
+PROGNAME:=lisp
 
-SRCS=$(wildcard src/*.c)
-OBJS=${SRCS:.c=.o}
-CFLAGS=-g\
+SRCS:=$(wildcard src/*.c)
+OBJS:=${SRCS:.c=.o}
+all-tests:=$(addsuffix .test, $(basename $(wildcard tests/*.in)))
+CFLAGS:=-g\
        -std=c11\
        -pedantic\
        -Wall\
@@ -10,7 +11,7 @@ CFLAGS=-g\
        -DEVAL\
        -DDEBUG\
        -Wno-unused-function\
-       -DTRACE\
+       #-DTRACE\
        #-DMTRACE\
        #-DDEBUG_S_BETA_RED\
        #-DDEBUGEVAL\
@@ -25,9 +26,9 @@ CFLAGS=-g\
        #-DDEBUGREAD\
        #-DDEBUGSEXP_END\
 
-LDFLAGS=-lbsd
+LDFLAGS:=-lbsd
 
-.PHONY: tags clean
+.PHONY: tags clean test all
 
 PROGNAME: ${OBJS} tags
 	cc ${CFLAGS} -o ${PROGNAME} ${OBJS} ${LDFLAGS}
@@ -37,3 +38,10 @@ tags: ${SRCS}
 
 clean:
 	rm ${PROGNAME} ${OBJS}
+
+check : $(all-tests)
+	@echo "all test passed."
+
+%.test : %.in %.out ${PROGNAME}
+	@$(abspath $(PROGNAME)) <$< 2>&1 | diff -q $(word 2, $?) - >/dev/null || \
+		(echo "Test $(<F) failed" && exit 1)

@@ -1,0 +1,9 @@
+(define 0 (quote zero))
+
+(define id (lambda (x) x))
+
+0
+(id 0)
+(id (id 0))
+((id id) 0)
+((id id) (id 0))

@@ -1,0 +1,7 @@
+a
+b
+hi there
+(quote hi)
+(lambda (x) hi)
+nil
+((lambda (x) x) (quote y))
