@@ -1,0 +1,4 @@
+(define a (quote yes))
+(define b (quote no))
+
+((lambda (a b) b) b a)

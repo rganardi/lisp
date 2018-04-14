@@ -885,6 +885,7 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	struct Env *e = NULL;
 	struct Sexp *pp = NULL;
 	struct Sexp *args = NULL;
+	struct Env *tmp_e = NULL;
 
 	if (len_sexp(s->pair) < 3) {
 		fprintf(stderr, "s_beta_red: lambda expression must be of length at least 3\n");
@@ -989,11 +990,19 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 					return 1;
 				}
 
-				if (eval(arg, &e, res)) {
+				if (env_cp(&tmp_e, *env)) {
+					fprintf(stderr, "s_beta_red: failed to copy env\n");
+					return 1;
+				}
+
+				if (eval(arg, &tmp_e, res)) {
 					fprintf(stderr, "s_beta_red: eval failed\n");
 					free_env(e);
 					return 1;
 				}
+
+				free_env(tmp_e);
+				tmp_e = NULL;
 
 				if ((*res) && new_env_binding(&e,
 							p->atom,
