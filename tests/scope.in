@@ -1,0 +1,42 @@
+(define 0
+  (lambda (f)
+    (lambda (x) x)))
+
+(define 1
+  (lambda (f)
+    (lambda (x) (f x))))
+
+(define +
+  (lambda (m n)
+    (lambda (f)
+      (lambda (x)
+	((m f) ((n f) x))))))
+
+(define list
+  (lambda x x))
+
+;0
+((0 (lambda x x)) (quote hi))
+(((+ 0 0) (lambda x x)) (quote hi))
+((0 list) (quote hi))
+
+;1
+((1 (lambda x x)) (quote hi))
+((1 list) (quote hi))
+(((+ 1 0) (lambda x x)) (quote hi))
+(((+ 0 1) (lambda x x)) (quote hi))
+
+;2
+(((+ 1 1) list) (quote hi))
+(((+ 1 1) (lambda x x)) (quote hi))
+(((+ 0 (+ 1 1)) (lambda x x)) (quote hi))
+(((+ (+ 1 1) 0) (lambda x x)) (quote hi))
+
+;3
+(((+ 1 (+ 1 1)) (lambda x x)) (quote hi))
+(((+ (+ 1 1) 1) (lambda x x)) (quote hi))
+(((+ (+ 1 1) 1) list) (quote hi))
+
+;4
+(((+ (+ (+ 1 1) 1) 1) (lambda x x)) (quote hi))
+(((+ 1 (+ (+ 1 1) 1)) (lambda x x)) (quote hi))

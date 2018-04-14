@@ -759,35 +759,31 @@ int env_unbind(struct Env **env, char *name) {
 	struct Env *prev = NULL;
 	struct Env *e = *env;
 
-	while (strcmp(e->name, name)) {
-		prev = e;
-		e = e->next;
-		if (!e) {
 #if DEBUG_ENV_UNBIND
-			fprintf(stderr, "env_unbind: \"%s\" not found\n", name);
-#endif
-			return 1;
-		}
-	}
-
-#if DEBUG_ENV_UNBIND
-	printf("env_unbind: unbinding \"%s\"\n", e->name);
+	printf("env_unbind: unbinding \"%s\"\n", name);
 	printf("before\n");
 	print_env(*env);
 #endif
-
-	if (!prev) {
-		//e is start
-		*env = e->next;
-		e->next = NULL;
-		free_env(e);
-	} else {
-		//e is middle
-		prev->next = e->next;
-		e->next = NULL;
-		free_env(e);
+	while (e) {
+		if (!(strcmp(e->name, name))) {
+			if (!prev) {
+				//e is start
+				*env = e->next;
+				e->next = NULL;
+				free_env(e);
+				e = *env;
+			} else {
+				//e is middle
+				prev->next = e->next;
+				e->next = NULL;
+				free_env(e);
+				e = prev->next;
+			}
+		} else {
+			prev = e;
+			e = e->next;
+		}
 	}
-
 #if DEBUG_ENV_UNBIND
 	printf("after\n");
 	print_env(*env);
@@ -1212,7 +1208,25 @@ int sexp_env_replace(struct Sexp **orig, struct Env *env) {
 				}
 				break;
 			case OBJ_PAIR:
-				if (sexp_env_replace(&(p->pair), env)) {
+				//special case for lambda expression
+				if ((p->pair)->type == OBJ_ATOM
+						&& !(strcmp((p->pair)->atom, "lambda"))) {
+					if (s_lambda(p->pair, env, &result)) {
+						fprintf(stderr, "sexp_env_replace: failed to handle lambda\n");
+						return 1;
+					}
+					if (sexp_sub(&p, result)) {
+						fprintf(stderr, "sexp_env_replace: failed to sub\n");
+						return 1;
+					}
+					free_sexp(result);
+
+					if (prev) {
+						prev->next = p;
+					} else {
+						*orig = p;
+					}
+				} else if (sexp_env_replace(&(p->pair), env)) {
 					fprintf(stderr, "sexp_env_replace: failed to recurse\n");
 					return 1;
 				}
