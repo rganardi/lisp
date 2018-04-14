@@ -10,7 +10,7 @@ CFLAGS:=-g\
        -DPARSE\
        -DEVAL\
        -DDEBUG\
-       -Wno-unused-function\
+       #-Wno-unused-function\
        #-DTRACE\
        #-DMTRACE\
        #-DDEBUG_S_BETA_RED\

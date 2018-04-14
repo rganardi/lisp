@@ -38,12 +38,6 @@ struct Env {
 	char *name;
 };
 
-struct Closure {
-	struct Sexp *arg;
-	struct Sexp *body;
-	struct Env *env;
-};
-
 const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
@@ -70,9 +64,6 @@ int env_unbind(struct Env **env, char *name);
 void free_env(struct Env *env);
 int print_env(struct Env *env);
 int lookup_env(struct Env *env, char *name, struct Sexp **s);
-int new_closure(struct Closure **cl, struct Sexp *s, struct Env env);
-int print_closure(struct Closure *cl);
-void free_closure(struct Closure *cl);
 int s_define(struct Sexp *s, struct Env **env);
 int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
 int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
@@ -841,88 +832,6 @@ int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	*s = NULL;
 
 	return 0;
-}
-
-int new_closure(struct Closure **cl, struct Sexp *s, struct Env env) {
-	struct Sexp *p = NULL;
-	struct Closure *c = NULL;
-	struct Env *e = NULL;
-
-	if (s->type != OBJ_PAIR) {
-		fprintf(stderr, "new_closure: not a lambda expression\n");
-		return 1;
-	}
-
-	if (strncmp((s->pair)->atom, "lambda", strlen("lambda")+1)
-			|| len_sexp(s->pair) < 3) {
-		fprintf(stderr, "new_closure: not a valid lambda expression\n");
-		return 1;
-	}
-
-	if (!(c = malloc(sizeof(struct Closure)))) {
-		fprintf(stderr, "new_closure: not enough memory for a closure\n");
-		return 1;
-	}
-
-	if (!(p = malloc(sizeof(struct Sexp)))) {
-		fprintf(stderr, "new_closure: not enough memory for a sexp\n");
-		return 1;
-	}
-
-	if (sexp_cp(p, ((s->pair)->next)->pair)) {
-		fprintf(stderr, "new_closure: failed to copy args\n");
-		return 1;
-	}
-
-	c->arg = p;
-
-	if (!(p = malloc(sizeof(struct Sexp)))) {
-		fprintf(stderr, "new_closure: not enough memory for a sexp\n");
-		return 1;
-	}
-
-	if (sexp_cp(p, ((s->pair)->next)->next)) {
-		fprintf(stderr, "new_closure: failed to copy args\n");
-		return 1;
-	}
-
-	c->body = p;
-
-	if (env_cp(&e, env)) {
-		fprintf(stderr, "new_closure: can't copy environment");
-		return 1;
-	}
-
-	c->env = e;
-
-	*cl = c;
-
-	return 0;
-}
-
-int print_closure(struct Closure *cl) {
-	printf("cl->arg\n");
-	if (print_sexp(cl->arg)) {
-		return 1;
-	}
-
-	printf("cl->body\n");
-	if (print_sexp(cl->body)) {
-		return 1;
-	}
-
-	printf("cl->env\n");
-	if (print_env(cl->env)) {
-		return 1;
-	}
-	return 0;
-}
-
-void free_closure(struct Closure *cl) {
-	free_sexp(cl->arg);
-	free_sexp(cl->body);
-	free_env(cl->env);
-	free(cl);
 }
 
 int s_define(struct Sexp *s, struct Env **env) {
