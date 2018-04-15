@@ -10,12 +10,18 @@
 #include <stdlib.h>
 #include <signal.h>
 
+char *argv0;
+#include "arg.h"
+
 //#include "strlcat.c"
 
-#define BUFFER_SIZE 256
-#define SEXP_BEGIN "("
-#define SEXP_END ")"
-#define SEXP_DELIM " \t"
+#define BUFFER_SIZE	256
+#define SEXP_BEGIN	"("
+#define SEXP_END	")"
+#define SEXP_DELIM	" \t"
+
+#define TRACE_FLAG	1 << 0
+#define ENV_FLAG	1 << 1
 
 enum s_type {
 	OBJ_NULL,	/* scheme '() */
@@ -42,6 +48,8 @@ const struct Sexp s_null = {
 	.type = OBJ_NULL,
 	.next = NULL
 };
+
+char flag = 0;
 
 #if DEBUG
 void segfault_handler(int error);
@@ -1271,18 +1279,21 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	printf("with env\n");
 	print_env(*env);
 #endif
-#if TRACE
-	printf("trace: ");
-	p = s->next;
-	s->next = NULL;
-	print_sexp(s);
-	s->next = p;
-	p = s;
-	printf("\n");
-	printf("with env\n");
-	print_env(*env);
-	printf("\n");
-#endif
+	if (flag & TRACE_FLAG) {
+		printf("trace: ");
+		p = s->next;
+		s->next = NULL;
+		print_sexp(s);
+		s->next = p;
+		p = s;
+		printf("\n");
+	}
+
+	if (flag & ENV_FLAG) {
+		printf("with env\n");
+		print_env(*env);
+		printf("\n");
+	}
 
 	switch (s->type) {
 		case OBJ_NULL:
@@ -1600,13 +1611,23 @@ int repl() {
 	return 0;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
 	//printf("main %p\n", (void *) main);
 #ifdef MTRACE
 	putenv("MALLOC_TRACE=mtrace.log");
 	mtrace();
 #endif
 	signal(SIGSEGV, segfault_handler);
+
+	ARGBEGIN {
+		case 't':
+			flag = flag ^ TRACE_FLAG;
+			break;
+		case 'e':
+			flag = flag ^ ENV_FLAG;
+			break;
+	} ARGEND;
+
 	repl();
 #ifdef MTRACE
 	muntrace();
