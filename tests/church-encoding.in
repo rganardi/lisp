@@ -1,3 +1,19 @@
+; vim: foldmethod=marker
+;pairs	{{{
+(define pair
+  (lambda (a b)
+    (lambda (f)
+      (f (quote a) (quote b)))))
+
+(define car
+  (lambda (f)
+    (f (lambda (x y) x))))
+
+(define cdr
+  (lambda (f)
+    (f (lambda (x y) y))))
+;}}}
+;arithmetic	{{{
 (define 0
   (lambda (f)
     (lambda (x) x)))
@@ -8,31 +24,185 @@
 
 (define +
   (lambda (m n)
-    (lambda (h)
+    (lambda (fn)
       (lambda (z)
-	((m h) ((n h) z))))))
+	((m fn) ((n fn) z))))))
 
+(define *
+  (lambda (m n)
+    (lambda (f)
+      (lambda (x)
+	((m (n f)) x)))))
+
+(define exp
+  (lambda (m n)
+    (lambda (f)
+      (lambda (x)
+	(((n m) f) x)))))
+
+(define pred
+  (lambda (n)
+    (lambda (f)
+      (lambda (first)
+	(cdr ((n
+		(lambda (p)
+		  ((car p)
+		   (pair #f (quote first))
+		   (pair #f (f (cdr p))))))
+	      (pair #t first)))))))
+
+(define -
+  (lambda (m n)
+    (lambda (x)
+      (((n pred) m) x))))
+;}}}
+;booleans	{{{
+(define #t
+  (lambda (a b)
+    a))
+
+(define #f
+  (lambda (a b)
+    b))
+
+(define not
+  (lambda (p)
+    (lambda (a b)
+      ((p #f #t) a b))))
+
+(define not
+  (lambda (p)
+    (lambda (a b)
+      (p b a))))
+
+(define and
+  (lambda (p q)
+    (lambda (a b)
+      ((p q p) a b))))
+
+(define or
+  (lambda (p q)
+    (lambda (a b)
+      ((p p q) a b))))
+
+(define xor
+  (lambda (p q)
+    (lambda (a b)
+      ((p (not q) q) a b))))
+;}}}
+;predicates	{{{
+(define 0?
+  (lambda (n)
+    ((n (lambda (x) #f)) #t)))
+
+(define leq?
+  (lambda (m n)
+    (0? (- m n))))
+
+(define eq?
+  (lambda (m n)
+    (and (leq? m n) (leq? n m))))
+;}}}
+;combinator	{{{
+(define y-combinator
+  (lambda (fn)
+    ((lambda (x) (fn (lambda (y) ((x x) y))))
+     (lambda (x) (fn (lambda (y) ((x x) y)))))))
+;}}}
+;misc	{{{
 (define list
-  (lambda u u))
+  (lambda x x))
 
-;0
-((0 (lambda v v)) (quote hi))
-(((+ 0 0) (lambda v v)) (quote hi))
-((0 list) (quote hi))
+(define enc
+  (lambda (x)
+    (lambda ()
+      (quote x))))
 
-;1
-((1 (lambda v v)) (quote hi))
-((1 list) (quote hi))
-(((+ 1 0) (lambda v v)) (quote hi))
-(((+ 0 1) (lambda v v)) (quote hi))
+(define loop
+  (lambda ()
+    (loop)))
+;}}}
+;pairs test	{{{
+(pair (quote yes) (quote no))
+(car (pair (quote yes) (quote no)))
+(cdr (pair (quote yes) (quote no)))
+;}}}
+;arithmetic test	{{{
+(((+ 1 (+ 1 1)) (lambda u u)) (quote hi))
+;outputs 3
 
-;2
-(((+ 1 1) list) (quote hi))
-(((+ 1 1) (lambda v v)) (quote hi))
-(((+ 0 (+ 1 1)) (lambda v v)) (quote hi))
-(((+ (+ 1 1) 0) (lambda v v)) (quote hi))
+(((* (+ 1 (+ 1 1)) (+ 1 1)) list) (quote hi))
+;outputs 6
 
-;3
-(((+ 1 (+ 1 1)) (lambda v v)) (quote hi))
-(((+ (+ 1 1) 1) (lambda v v)) (quote hi))
-(((+ (+ 1 1) 1) list) (quote hi))
+(((exp (+ 1 (+ 1 1)) (+ 0 (+ 1 1))) list) (quote hi))
+;outputs 9
+
+(((pred (+ 1 1)) list) (quote hi))
+;outputs 1
+
+(((pred (+ 1 (+ 1 1))) list) (quote hi))
+;outputs 2
+
+(((- (+ 1 (+ 1 1)) (+ 0 1)) list) (quote hi))
+;outputs 2
+;}}}
+;booleans test	{{{
+((not #t) (quote yes) (quote no))
+((not #f) (quote yes) (quote no))
+
+((and #t #t) (quote 0) (quote 1))
+((and #t #f) (quote 0) (quote 1))
+((and #f #t) (quote 0) (quote 1))
+((and #f #f) (quote 0) (quote 1))
+
+((or #t #t) (quote 0) (quote 1))
+((or #t #f) (quote 0) (quote 1))
+((or #f #t) (quote 0) (quote 1))
+((or #f #f) (quote 0) (quote 1))
+
+((xor #t #t) (quote yes) (quote no))
+((xor #t #f) (quote yes) (quote no))
+((xor #f #t) (quote yes) (quote no))
+((xor #f #f) (quote yes) (quote no))
+;}}}
+;predicates test	{{{
+((0? 0) (quote yes) (quote no))
+((0? 1) (quote yes) (quote no))
+((0? (+ 0 0)) (quote yes) (quote no))
+((0? (+ 1 0)) (quote yes) (quote no))
+((0? (+ 0 1)) (quote yes) (quote no))
+((0? (+ 0 (+ 0 (+ 0 0)))) (quote yes) (quote no))
+
+((leq? (+ 1 0) 1) (quote yes) (quote no))
+;outputs yes
+
+((leq? (+ 1 1) 1) (quote yes) (quote no))
+;outputs no
+
+((eq? (+ 0 1) (+ 1 0)) (quote yes) (quote no))
+;outputs yes
+
+((eq? (+ 1 1) (+ 1 0)) (quote yes) (quote no))
+;outputs no
+
+;}}}
+;combinator test	{{{
+(define almost-fac
+  (lambda (f)
+    (lambda (n)
+      (((0? n) (lambda () 1) (lambda () (* n (f (- n 1)))))))))
+
+(define almost-sum
+  (lambda (f)
+    (lambda (n)
+      (((0? n) (lambda () 0) (lambda () (+ n (f (- n 1)))))))))
+
+(define fac (y-combinator almost-fac))
+(define sum (y-combinator almost-sum))
+
+(((fac (+ 1 (+ 1 1))) (lambda u u)) (quote hi))
+;outputs 6
+(((sum (+ (+ 1 1) (+ 1 1))) list) (quote hi))
+;outputs 10
+
+;}}}

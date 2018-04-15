@@ -43,5 +43,6 @@ check : $(all-tests)
 	@echo "all test passed."
 
 %.test : %.in %.out ${PROGNAME}
-	@$(abspath $(PROGNAME)) <$< 2>&1 | diff -q $(word 2, $?) - >/dev/null || \
+	@echo "running $<";\
+		$(abspath $(PROGNAME)) <$< 2>&1 | diff -q $(word 2, $?) - >/dev/null || \
 		(echo "Test $(<F) failed" && exit 1)

@@ -2,17 +2,62 @@ parse_eval: unspecified
 parse_eval: unspecified
 parse_eval: unspecified
 parse_eval: unspecified
-hi
-hi
-hi
-(hi)
-(hi)
-(hi)
-(hi)
-((hi))
-((hi))
-((hi))
-((hi))
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+(lambda (f) (f (quote yes) (quote no)))
+yes
+no
 (((hi)))
-(((hi)))
-(((hi)))
+((((((hi))))))
+(((((((((hi)))))))))
+(hi)
+((hi))
+((hi))
+no
+yes
+0
+1
+1
+1
+0
+0
+0
+1
+no
+yes
+yes
+no
+yes
+no
+yes
+no
+no
+yes
+yes
+no
+yes
+no
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+((((((hi))))))
+((((((((((hi))))))))))
