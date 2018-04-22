@@ -755,33 +755,24 @@ int env_rebind(struct Env **env, char *name, struct Sexp new_object) {
 }
 
 int env_unbind(struct Env **env, char *name) {
-	struct Env *prev = NULL;
-	struct Env *e = *env;
+	struct Env *pp = *env;
+	struct Env **p = env;
 
 #if DEBUG_ENV_UNBIND
 	printf("env_unbind: unbinding \"%s\"\n", name);
 	printf("before\n");
 	print_env(*env);
 #endif
-	while (e) {
-		if (!(strcmp(e->name, name))) {
-			if (!prev) {
-				//e is start
-				*env = e->next;
-				e->next = NULL;
-				free_env(e);
-				e = *env;
-			} else {
-				//e is middle
-				prev->next = e->next;
-				e->next = NULL;
-				free_env(e);
-				e = prev->next;
-			}
-		} else {
-			prev = e;
-			e = e->next;
+	while (*p) {
+		if (!(strcmp((*p)->name, name))) {
+			pp = *p;
+			*p = (*p)->next;
+
+			pp->next = NULL;
+			free_env(pp);
+			continue;
 		}
+		p = &(*p)->next;
 	}
 #if DEBUG_ENV_UNBIND
 	printf("after\n");

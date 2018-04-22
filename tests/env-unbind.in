@@ -1,0 +1,12 @@
+(define 0 (quote zero))
+
+(define 1 (quote one))
+(define id (lambda (x) x))
+(define list (lambda x x))
+,p
+
+(undef nil)
+,p
+
+(undef list)
+,p

@@ -1,0 +1,24 @@
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+parse_eval: unspecified
+printing environment
+list	->	(lambda x x)
+id	->	(lambda (x) x)
+1	->	one
+0	->	zero
+nil	->	
+parse_eval: unspecified
+parse_eval: unspecified
+printing environment
+list	->	(lambda x x)
+id	->	(lambda (x) x)
+1	->	one
+0	->	zero
+parse_eval: unspecified
+parse_eval: unspecified
+printing environment
+id	->	(lambda (x) x)
+1	->	one
+0	->	zero
+parse_eval: unspecified
