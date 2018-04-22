@@ -19,6 +19,7 @@ char *argv0;
 #define SEXP_BEGIN	"("
 #define SEXP_END	")"
 #define SEXP_DELIM	" \t"
+#define LEN(x)	(sizeof(x)/sizeof(*(x)))
 
 #define TRACE_FLAG	1 << 0
 #define ENV_FLAG	1 << 1
@@ -44,25 +45,21 @@ struct Env {
 	char *name;
 };
 
-const struct Sexp s_null = {
-	.type = OBJ_NULL,
-	.next = NULL
-};
-
-char flag = 0;
-
 #if DEBUG
 void segfault_handler(int error);
 int dump_string(char *str, size_t n);
 #endif
+int match(char c, const char *bytes);
 int tok(char *str, char **start, char **end, char **next, size_t n);
+int read_line(FILE *stream, char *buf, size_t bufsiz);
+size_t append_string(char **dest, const char *src);
 int check_if_sexp(char *str);
 int sexp_end(char *str, char **end, size_t n);
+int parse_sexp(char *str, struct Sexp **tree, size_t n);
 int print_sexp(struct Sexp *s);
 void free_sexp(struct Sexp *s);
 int append_sexp(struct Sexp **dst, struct Sexp *src);
 size_t len_sexp(struct Sexp *s);
-int parse_sexp(char *str, struct Sexp **tree, size_t n);
 int sexp_cp(struct Sexp *dst, struct Sexp *src);
 int sexp_sub(struct Sexp **orig, struct Sexp *new);
 int new_env_binding(struct Env **env, char *name, struct Sexp s_object);
@@ -72,15 +69,35 @@ int env_unbind(struct Env **env, char *name);
 void free_env(struct Env *env);
 int print_env(struct Env *env);
 int lookup_env(struct Env *env, char *name, struct Sexp **s);
-int s_define(struct Sexp *s, struct Env **env);
-int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
 int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
 int sexp_env_replace(struct Sexp **orig, struct Env *env);
-int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res);
+int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
+int s_define(struct Sexp *s, struct Env **env, struct Sexp **res);
+int s_lambda(struct Sexp *s, struct Env **env, struct Sexp **res);
+int s_quote(struct Sexp *s, struct Env **env, struct Sexp **res);
+int s_undef(struct Sexp *s, struct Env **env, struct Sexp **res);
 int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
 int parse_eval(char *str, struct Env **env);
-int read_line(FILE *stream, char *buf, size_t bufsiz);
 int repl();
+int main(int argc, char *argv[]);
+
+const struct Sexp s_null = {
+	.type = OBJ_NULL,
+	.next = NULL
+};
+
+char flag = 0;
+
+static struct {
+	char *s;
+	int (*handler)(struct Sexp *s, struct Env **env, struct Sexp **res);
+} handler_map[] = {
+	{"define", s_define},
+	{"lambda", s_lambda},
+	{"quote", s_quote},
+	{"undef", s_undef},
+};
+
 
 #if DEBUG
 void segfault_handler(int error) {
@@ -1160,7 +1177,7 @@ int sexp_env_replace(struct Sexp **orig, struct Env *env) {
 	return 0;
 }
 
-int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
+int s_lambda(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	//s = (lambda (args) body)
 	//s_lambda replaces all the variables in body (excluding formal params)
 	//		with what they're bound to in env
@@ -1175,10 +1192,10 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	//remove args binding in env
 #if DEBUG_S_LAMBDA
 	printf("s_lambda: copying this env\n");
-	print_env(env);
+	print_env(*env);
 	printf("s_lambda: copying\n");
 #endif
-	if (env_cp(&e, *env)) {
+	if (env_cp(&e, **env)) {
 		fprintf(stderr, "s_lambda: failed to copy env\n");
 		return 1;
 	}
@@ -1259,11 +1276,28 @@ int s_lambda(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	return 0;
 }
 
+int s_quote(struct Sexp *s, struct Env **env, struct Sexp **res) {
+	if (!(*res = malloc(sizeof(struct Sexp)))) {
+		fprintf(stderr, "eval: not enough memory\n");
+		return 1;
+	}
+#if DEBUG_S_QUOTE
+	printf("eval: quote quitting\n");
+#endif
+	return sexp_cp(*res, s->next);
+}
+
+int s_undef(struct Sexp *s, struct Env **env, struct Sexp **res) {
+	*res = NULL;
+	return env_unbind(env, (s->next)->atom);
+}
+
 int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 	//only eval the first element of s.
 	//on return, if *res != NULL, then you should free it.
 	struct Sexp *p = s;
 	struct Sexp *result = NULL;
+	int i = 0;
 #if DEBUGEVAL
 	printf("in eval\n");
 	print_sexp(s);
@@ -1342,32 +1376,11 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 					return 1;
 					break;
 				case OBJ_ATOM:
-					if (!(strcmp(p->atom, "define"))) {
-						*res = NULL;
-#if DEBUGEVAL
-						printf("eval: define expression\n");
-#endif
-						return s_define(p, env);
-						break;
-					} else if (!(strcmp(p->atom, "lambda"))) {
-#if DEBUGEVAL
-						printf("eval: lambda expression\n");
-#endif
-						return s_lambda(p, *env, res);
-						break;
-					} else if (!(strcmp(p->atom, "quote"))) {
-						if (!(*res = malloc(sizeof(struct Sexp)))) {
-							fprintf(stderr, "eval: not enough memory\n");
-							return 1;
+					for (i = 0; i < LEN(handler_map); i++) {
+						if (!(strcmp(p->atom, handler_map[i].s))) {
+							return handler_map[i].handler(p, env, res);
+							break;
 						}
-#if DEBUGEVAL
-						printf("eval: quote quitting\n");
-#endif
-						return sexp_cp(*res, p->next);
-						break;
-					} else if (!(strcmp(p->atom, "undef"))) {
-						return env_unbind(env, (p->next)->atom);
-						break;
 					}
 					//fall through;
 				case OBJ_PAIR:
