@@ -167,6 +167,50 @@ int tok(char *str, char **start, char **end, char **next, size_t n) {
 	return 1;
 }
 
+int read_line(FILE *stream, char *buf, size_t bufsiz) {
+	// read at most bufsize chars from fd into buf (including '\0')
+	size_t i = 0;
+	int c = '\0';
+
+	do {
+		c = fgetc(stream);
+		if (c == EOF)
+			return -1;
+		buf[i++] = c;
+	} while (c != '\n' && i < (bufsiz - 1));
+
+	if (buf[i - 1] == '\n') {
+		buf[i - 1] = ' '; /* eliminates '\n' */
+	}
+	buf[i] = '\0';
+	return 0;
+}
+
+size_t append_string(char **dest, const char *src) {
+	char *dst = *dest;
+	size_t n = strlen(dst) + strlen(src) + 1;
+
+#ifdef DEBUGAPPEND
+	printf("pre strlen(dst) %lu, strlen(src) %lu\n", strlen(dst), strlen(src));
+#endif
+
+	dst = realloc(dst, n);
+	if (!dst) {
+		fprintf(stderr, "can't resize dst\n");
+	}
+
+	if (strlcat(dst, src, n) >= n) {
+		fprintf(stderr, "cat failed\n");
+	}
+
+
+#ifdef DEBUGAPPEND
+	printf("post strlen(dst) %lu, strlen(src) %lu n %lu \n", strlen(dst), strlen(src), n);
+#endif
+	*dest = dst;
+	return n;
+}
+
 int check_if_sexp(char *str) {
 	while (match(*str, SEXP_DELIM)) {
 		str++;
@@ -252,6 +296,144 @@ int sexp_end(char *str, char **end, size_t n) {
 
 	*end = str;
 	return 1;
+}
+
+int parse_sexp(char *str, struct Sexp **tree, size_t n) {
+	/* args:
+	 *	char *str		= string to be parsed
+	 *	struct Sexp **tree	= tree to store the parsed Sexp
+	 *	size_t n		= length of string to be parsed (excluding last '\0')
+	 * */
+	char *end = NULL;
+	int err = -1;
+	struct Sexp *c;
+	char *start = NULL;
+	char *next = NULL;
+	size_t i = 0;
+
+#if DEBUGPARSE
+	printf("parse_sexp: parsing length %lu\n", n);
+	dump_string(str, n);
+#endif
+
+	while (match(*str, SEXP_DELIM)) {
+		str++;	/* eat whitespace */
+		i++;
+	}
+
+
+	end = NULL;
+	do {
+		err = tok(str, &start, &end, &next, n - i);
+		if (err) {
+#if DEBUGPARSE
+			fprintf(stderr, "parse_sexp: can't find token %s\n", str);
+#endif
+			return 0;
+		}
+#if DEBUGPARSE
+		printf("tok:\n");
+		dump_string(start, end - start + 1);
+		printf("start\t");
+		dump_string(start, 1);
+		printf("end\t");
+		dump_string(end, 1);
+		printf("next\t");
+		dump_string(next, 1);
+#endif
+
+		if (check_if_sexp(start)) {
+			/* parse the sexp one level down */
+
+			size_t sexp_len = 0;
+			err = sexp_end(start, &end, n - i);
+			if (err) {
+#if DEBUGPARSE
+				fprintf(stderr, "parse_sexp: can't find end\n");
+#endif
+				return 1;
+			}
+			sexp_len = end - start - 1;
+#if DEBUGPARSE
+			printf("sexp_len = %lu\n", sexp_len);
+			printf("-------------------------START-------------------\n");
+			printf("parse_sexp(%s, &inside, %lu)\n", start + 1, sexp_len);
+#endif
+			struct Sexp *inside;
+			inside = malloc(sizeof(struct Sexp));
+			*inside = s_null;
+
+			err = parse_sexp(start + 1, &inside, sexp_len);
+#if DEBUGPARSE
+			printf("-------------------------END---------------------\n");
+#endif
+			if (err) {
+#if DEBUGPARSE
+				fprintf(stderr, "cant do the thing inside\n");
+#endif
+				return 1;
+			}
+
+			c = malloc(sizeof(struct Sexp));
+			c->type = OBJ_PAIR;
+			c->pair = inside;
+			c->next = NULL;
+
+			append_sexp(tree, c);
+
+			i += (end - str) + 1;
+			str = end + 1;
+		} else {
+			/* append the current atom to the sexp */
+
+			c = malloc(sizeof(struct Sexp));
+
+			c->type = OBJ_ATOM;
+			char *buf = NULL;
+			buf = malloc((end - start + 2) * sizeof(char));
+			strlcpy(buf, start, end - start + 2);
+
+#if DEBUGPARSE
+			printf("parse_sexp: buf\n");
+			dump_string(buf, strlen(buf));
+#endif
+
+			c->atom = buf;
+			c->next = NULL;
+#if DEBUGPARSE
+			printf("%p appending c\n", (void *) c);
+			printf("%p input pre parse\n", (void *) *tree);
+#endif
+			append_sexp(tree, c);
+#if DEBUGPARSE
+			printf("%p input post parse\n", (void *) *tree);
+#endif
+			i += (next - str);
+			str = next;
+		}
+#if DEBUGPARSE
+		printf("chars parsed %lu\n", i);
+		printf("tok again\n");
+		printf("str\n");
+		dump_string(str, strlen(str));
+		printf("start\t");
+		dump_string(start, 1);
+		printf("end\t");
+		dump_string(end, 1);
+		printf("next\t");
+		dump_string(next, 1);
+#endif
+		start = NULL;
+		end = NULL;
+		next = NULL;
+
+	} while (*str != '\0' && i < n);
+
+#if DEBUGPARSE
+	printf("done parse\n");
+#endif
+
+	return 0;
 }
 
 int print_sexp(struct Sexp *s) {
@@ -397,159 +579,6 @@ size_t len_sexp(struct Sexp *s) {
 		s = s->next;
 	}
 	return n;
-}
-
-int parse_sexp(char *str, struct Sexp **tree, size_t n) {
-	/* args:
-	 *	char *str		= string to be parsed
-	 *	struct Sexp **tree	= tree to store the parsed Sexp
-	 *	size_t n		= length of string to be parsed (excluding last '\0')
-	 * */
-	char *end = NULL;
-	//char *t = NULL;
-	int err = -1;
-	struct Sexp *c;
-	char *start = NULL;
-	char *next = NULL;
-	size_t i = 0;
-
-#if DEBUGPARSE
-	printf("parse_sexp: parsing length %lu\n", n);
-	dump_string(str, n);
-#endif
-
-	/* while loop, parse str until end */
-	//err = sexp_end(str, &end, n);
-	//if (err) {
-	//	fprintf(stderr, "parse_sexp: can't parse the sexp %s\n", str);
-	//	return 1;
-	//}
-
-	while (match(*str, SEXP_DELIM)) {
-		str++;	/* eat whitespace */
-		i++;
-	}
-
-
-#if DEBUGPARSE
-	//printf("begin %p .. %p end\n", str, end - 0);
-	//printf("begin %s .. %s end\n", str, (end - 0));
-	//printf("begin %x .. %x end\n", *str, *(end - 0));
-#endif
-
-	end = NULL;
-	do {
-		err = tok(str, &start, &end, &next, n - i);
-		if (err) {
-#if DEBUGPARSE
-			fprintf(stderr, "parse_sexp: can't find token %s\n", str);
-#endif
-			return 0;
-		}
-#if DEBUGPARSE
-		printf("tok:\n");
-		dump_string(start, end - start + 1);
-		printf("start\t");
-		dump_string(start, 1);
-		printf("end\t");
-		dump_string(end, 1);
-		printf("next\t");
-		dump_string(next, 1);
-#endif
-
-		if (check_if_sexp(start)) {
-			/* parse the sexp one level down */
-
-			size_t sexp_len = 0;
-			err = sexp_end(start, &end, n - i);
-			if (err) {
-#if DEBUGPARSE
-				fprintf(stderr, "parse_sexp: can't find end\n");
-#endif
-				return 1;
-			}
-			sexp_len = end - start - 1;
-#if DEBUGPARSE
-			printf("sexp_len = %lu\n", sexp_len);
-			//sleep(1);
-			printf("-------------------------START-------------------\n");
-			printf("parse_sexp(%s, &inside, %lu)\n", start + 1, sexp_len);
-#endif
-			struct Sexp *inside;
-			inside = malloc(sizeof(struct Sexp));
-			*inside = s_null;
-
-			err = parse_sexp(start + 1, &inside, sexp_len);
-#if DEBUGPARSE
-			printf("-------------------------END---------------------\n");
-#endif
-			if (err) {
-#if DEBUGPARSE
-				fprintf(stderr, "cant do the thing inside\n");
-#endif
-				return 1;
-			}
-
-			c = malloc(sizeof(struct Sexp));
-			c->type = OBJ_PAIR;
-			c->pair = inside;
-			c->next = NULL;
-
-			append_sexp(tree, c);
-
-			i += (end - str) + 1;
-			str = end + 1;
-		} else {
-			/* append the current atom to the sexp */
-
-			c = malloc(sizeof(struct Sexp));
-
-			c->type = OBJ_ATOM;
-			char *buf = NULL;
-			buf = malloc((end - start + 2) * sizeof(char));
-			strlcpy(buf, start, end - start + 2);
-
-#if DEBUGPARSE
-			printf("parse_sexp: buf\n");
-			dump_string(buf, strlen(buf));
-#endif
-
-			c->atom = buf;
-			c->next = NULL;
-#if DEBUGPARSE
-			printf("%p appending c\n", (void *) c);
-			printf("%p input pre parse\n", (void *) *tree);
-#endif
-			append_sexp(tree, c);
-#if DEBUGPARSE
-			printf("%p input post parse\n", (void *) *tree);
-#endif
-			i += (next - str);
-			str = next;
-		}
-#if DEBUGPARSE
-		printf("chars parsed %lu\n", i);
-		printf("tok again\n");
-		printf("str\n");
-		dump_string(str, strlen(str));
-		printf("start\t");
-		dump_string(start, 1);
-		printf("end\t");
-		dump_string(end, 1);
-		printf("next\t");
-		dump_string(next, 1);
-#endif
-		start = NULL;
-		end = NULL;
-		next = NULL;
-
-	} while (*str != '\0' && i < n);
-
-#if DEBUGPARSE
-	printf("done parse\n");
-#endif
-
-	return 0;
 }
 
 int sexp_cp(struct Sexp *dst, struct Sexp *src) {
@@ -726,6 +755,7 @@ int env_cp(struct Env **dst, struct Env src) {
 
 		d->name = str;
 		d->s_object = p;
+
 		if (dd) {
 			dd->next = d;
 		} else {
@@ -850,47 +880,106 @@ int lookup_env(struct Env *env, char *name, struct Sexp **s) {
 	return 0;
 }
 
-int s_define(struct Sexp *s, struct Env **env) {
-	struct Sexp *p = NULL;
-	struct Sexp *tmp = NULL;
+//FIXME: this is unused
+int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
+	//replaces all occurences of name with new
+	struct Sexp *s = *orig;
+	struct Sexp *prev = NULL;
 
-	if (len_sexp(s) != 3) {
-		fprintf(stderr, "s_define: define takes exactly two args\n");
-		return 1;
-	}
+	while (s) {
+		switch (s->type) {
+			case OBJ_NULL:
+				return 0;
+			case OBJ_ATOM:
+				if (!(strcmp(s->atom, name))) {
+					if (sexp_sub(&s, new)) {
+						fprintf(stderr, "sexp_replace_all: failed to sub\n");
+						return 1;
+					}
 
-	s = s->next;
-	if (s->type != OBJ_ATOM) {
-		fprintf(stderr, "s_define: name must be an atom\n");
-		return 1;
-	}
+					if (prev) {
+						prev->next = s;
+					} else {
+						*orig = s;
+					}
+				}
+				break;
+			case OBJ_PAIR:
+				if (sexp_replace_all(&(s->pair), name, new)) {
+					fprintf(stderr, "sexp_replace_all: failed to recurse\n");
+					return 1;
+				}
 
-#if DEBUG_DEFINE
-	printf("s_define: eval atom\n");
-#endif
-	if (eval(s->next, env, &tmp)) {
-		fprintf(stderr, "s_define: failed to eval the sexp\n");
-		return 1;
-	}
-
-	if (lookup_env(*env, s->atom, &p)) {
-		if (env_rebind(env, s->atom, *tmp)) {
-			fprintf(stderr, "s_define: rebind failed\n");
-			free_sexp(tmp);
-			return 1;
+				break;
+			default:
+				fprintf(stderr, "sexp_replace_all: unknown sexp type\n");
+				return 1;
+				break;
 		}
-	} else {
-		if (new_env_binding(env, s->atom, *tmp)) {
-			fprintf(stderr, "s_define: new binding failed\n");
-			free_sexp(tmp);
-			return 1;
-		}
+
+		prev = s;
+		s = s->next;
 	}
-#if DEBUG_DEFINE
-	print_env(*env);
-	printf("s_define: quitting\n");
-#endif
-	free_sexp(tmp);
+
+	return 0;
+}
+
+int sexp_env_replace(struct Sexp **orig, struct Env *env) {
+	struct Sexp *p = *orig;
+	struct Sexp *result = NULL;
+	struct Sexp *prev = NULL;
+
+	while (p) {
+		switch (p->type) {
+			case OBJ_NULL:
+				return 0;
+			case OBJ_ATOM:
+				if (lookup_env(env, p->atom, &result)) {
+					if (sexp_sub(&p, result)) {
+						fprintf(stderr, "sexp_env_replace: failed to replace\n");
+						return 1;
+					}
+
+					if (prev) {
+						prev->next = p;
+					} else {
+						*orig = p;
+					}
+				}
+				break;
+			case OBJ_PAIR:
+				//special case for lambda expression
+				if ((p->pair)->type == OBJ_ATOM
+						&& !(strcmp((p->pair)->atom, "lambda"))) {
+					if (s_lambda(p->pair, &env, &result)) {
+						fprintf(stderr, "sexp_env_replace: failed to handle lambda\n");
+						return 1;
+					}
+					if (sexp_sub(&p, result)) {
+						fprintf(stderr, "sexp_env_replace: failed to sub\n");
+						return 1;
+					}
+					free_sexp(result);
+
+					if (prev) {
+						prev->next = p;
+					} else {
+						*orig = p;
+					}
+				} else if (sexp_env_replace(&(p->pair), env)) {
+					fprintf(stderr, "sexp_env_replace: failed to recurse\n");
+					return 1;
+				}
+				break;
+			default:
+				fprintf(stderr, "sexp_env_replace: unknown sexp type\n");
+				return 1;
+				break;
+		}
+
+		prev = p;
+		p = p->next;
+	}
 	return 0;
 }
 
@@ -1062,6 +1151,7 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 		printf("s_beta_red: current env is\n");
 		print_env(e);
 #endif
+
 		if (eval(p, &e, res)) {
 			fprintf(stderr, "s_beta_red: eval failed\n");
 			free_env(e);
@@ -1075,105 +1165,49 @@ int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res) {
 	return 0;
 }
 
-int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new) {
-	//replaces all occurences of name with new
-	struct Sexp *s = *orig;
-	struct Sexp *prev = NULL;
+int s_define(struct Sexp *s, struct Env **env, struct Sexp **res) {
+	struct Sexp *p = NULL;
+	struct Sexp *tmp = NULL;
 
-	while (s) {
-		switch (s->type) {
-			case OBJ_NULL:
-				return 0;
-			case OBJ_ATOM:
-				if (!(strcmp(s->atom, name))) {
-					if (sexp_sub(&s, new)) {
-						fprintf(stderr, "sexp_replace_all: failed to sub\n");
-						return 1;
-					}
+	*res = NULL;
 
-					if (prev) {
-						prev->next = s;
-					} else {
-						*orig = s;
-					}
-				}
-				break;
-			case OBJ_PAIR:
-				if (sexp_replace_all(&(s->pair), name, new)) {
-					fprintf(stderr, "sexp_replace_all: failed to recurse\n");
-					return 1;
-				}
-
-				break;
-			default:
-				fprintf(stderr, "sexp_replace_all: unknown sexp type\n");
-				return 1;
-				break;
-		}
-
-		prev = s;
-		s = s->next;
+	if (len_sexp(s) != 3) {
+		fprintf(stderr, "s_define: define takes exactly two args\n");
+		return 1;
 	}
 
-	return 0;
-}
-
-int sexp_env_replace(struct Sexp **orig, struct Env *env) {
-	struct Sexp *p = *orig;
-	struct Sexp *result = NULL;
-	struct Sexp *prev = NULL;
-
-	while (p) {
-		switch (p->type) {
-			case OBJ_NULL:
-				return 0;
-			case OBJ_ATOM:
-				if (lookup_env(env, p->atom, &result)) {
-					if (sexp_sub(&p, result)) {
-						fprintf(stderr, "sexp_env_replace: failed to replace\n");
-						return 1;
-					}
-
-					if (prev) {
-						prev->next = p;
-					} else {
-						*orig = p;
-					}
-				}
-				break;
-			case OBJ_PAIR:
-				//special case for lambda expression
-				if ((p->pair)->type == OBJ_ATOM
-						&& !(strcmp((p->pair)->atom, "lambda"))) {
-					if (s_lambda(p->pair, env, &result)) {
-						fprintf(stderr, "sexp_env_replace: failed to handle lambda\n");
-						return 1;
-					}
-					if (sexp_sub(&p, result)) {
-						fprintf(stderr, "sexp_env_replace: failed to sub\n");
-						return 1;
-					}
-					free_sexp(result);
-
-					if (prev) {
-						prev->next = p;
-					} else {
-						*orig = p;
-					}
-				} else if (sexp_env_replace(&(p->pair), env)) {
-					fprintf(stderr, "sexp_env_replace: failed to recurse\n");
-					return 1;
-				}
-				break;
-			default:
-				fprintf(stderr, "sexp_env_replace: unknown sexp type\n");
-				return 1;
-				break;
-		}
-
-		prev = p;
-		p = p->next;
+	s = s->next;
+	if (s->type != OBJ_ATOM) {
+		fprintf(stderr, "s_define: name must be an atom\n");
+		return 1;
 	}
+
+#if DEBUG_DEFINE
+	printf("s_define: eval atom\n");
+#endif
+	if (eval(s->next, env, &tmp)) {
+		fprintf(stderr, "s_define: failed to eval the sexp\n");
+		return 1;
+	}
+
+	if (lookup_env(*env, s->atom, &p)) {
+		if (env_rebind(env, s->atom, *tmp)) {
+			fprintf(stderr, "s_define: rebind failed\n");
+			free_sexp(tmp);
+			return 1;
+		}
+	} else {
+		if (new_env_binding(env, s->atom, *tmp)) {
+			fprintf(stderr, "s_define: new binding failed\n");
+			free_sexp(tmp);
+			return 1;
+		}
+	}
+#if DEBUG_DEFINE
+	print_env(*env);
+	printf("s_define: quitting\n");
+#endif
+	free_sexp(tmp);
 	return 0;
 }
 
@@ -1502,50 +1536,6 @@ int parse_eval(char *str, struct Env **env) {
 	return 0;
 }
 
-int read_line(FILE *stream, char *buf, size_t bufsiz) {
-	// read at most bufsize chars from fd into buf (including '\0')
-	size_t i = 0;
-	int c = '\0';
-
-	do {
-		c = fgetc(stream);
-		if (c == EOF)
-			return -1;
-		buf[i++] = c;
-	} while (c != '\n' && i < (bufsiz - 1));
-
-	if (buf[i - 1] == '\n') {
-		buf[i - 1] = ' '; /* eliminates '\n' */
-	}
-	buf[i] = '\0';
-	return 0;
-}
-
-size_t append_string(char **dest, const char *src) {
-	char *dst = *dest;
-	size_t n = strlen(dst) + strlen(src) + 1;
-
-#ifdef DEBUGAPPEND
-	printf("pre strlen(dst) %lu, strlen(src) %lu\n", strlen(dst), strlen(src));
-#endif
-
-	dst = realloc(dst, n);
-	if (!dst) {
-		fprintf(stderr, "can't resize dst\n");
-	}
-
-	if (strlcat(dst, src, n) >= n) {
-		fprintf(stderr, "cat failed\n");
-	}
-
-
-#ifdef DEBUGAPPEND
-	printf("post strlen(dst) %lu, strlen(src) %lu n %lu \n", strlen(dst), strlen(src), n);
-#endif
-	*dest = dst;
-	return n;
-}
-
 int repl() {
 	char buf[BUFFER_SIZE];
 	char *str = NULL;
@@ -1616,7 +1606,6 @@ int repl() {
 }
 
 int main(int argc, char *argv[]) {
-	//printf("main %p\n", (void *) main);
 #ifdef MTRACE
 	putenv("MALLOC_TRACE=mtrace.log");
 	mtrace();
