@@ -30,4 +30,4 @@ int s_undef(struct Sexp *, struct Env **, struct Sexp **);
 int eval(struct Sexp *, struct Env **, struct Sexp **);
 int parse_eval(char *, struct Env **);
 int repl();
-int main(int, char *);
+int main(int, char *[]);
