@@ -17,6 +17,19 @@ char *argv0;
 
 //#include "strlcat.c"
 
+char flag = 0;
+
+
+static const struct {
+	char *s;
+	int (*handler)(struct Sexp *s, struct Env **env, struct Sexp **res);
+} handler_map[] = {
+	{"define", s_define},
+	{"lambda", s_lambda},
+	{"quote", s_quote},
+	{"undef", s_undef},
+};
+
 #if DEBUG
 void segfault_handler(int error) {
 	char buf[23] = "SEGFAULT, bad program\n";
@@ -685,7 +698,7 @@ int eval(struct Sexp *s, struct Env **env, struct Sexp **res) {
 			printf("eval: atom\t%s\n", s->atom);
 #endif
 
-			if (!(strncmp(s->atom, ",p", strlen(",p")+1))) {
+			if (!(strcmp(s->atom, ",p"))) {
 				printf("printing environment\n");
 				print_env(*env);
 				break;

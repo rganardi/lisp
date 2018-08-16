@@ -11,36 +11,23 @@ struct Env {
 };
 
 #if DEBUG
-void segfault_handler(int error);
-int dump_string(char *str, size_t n);
+void segfault_handler(int);
+int dump_string(char *, size_t);
 #endif
-int new_env_binding(struct Env **env, char *name, struct Sexp s_object);
-int env_cp(struct Env **dst, struct Env src);
-int env_rebind(struct Env **env, char *name, struct Sexp new_object);
-int env_unbind(struct Env **env, char *name);
-void free_env(struct Env *env);
-int print_env(struct Env *env);
-int lookup_env(struct Env *env, char *name, struct Sexp **s);
-int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
-int sexp_env_replace(struct Sexp **orig, struct Env *env);
-int s_beta_red(struct Sexp *s, struct Env *env, struct Sexp **res);
-int s_define(struct Sexp *s, struct Env **env, struct Sexp **res);
-int s_lambda(struct Sexp *s, struct Env **env, struct Sexp **res);
-int s_quote(struct Sexp *s, struct Env **env, struct Sexp **res);
-int s_undef(struct Sexp *s, struct Env **env, struct Sexp **res);
-int eval(struct Sexp *s, struct Env **env, struct Sexp **res);
-int parse_eval(char *str, struct Env **env);
+int new_env_binding(struct Env **, char *, struct Sexp);
+int env_cp(struct Env **, struct Env);
+int env_rebind(struct Env **, char *, struct Sexp);
+int env_unbind(struct Env **, char *);
+void free_env(struct Env *);
+int print_env(struct Env *);
+int lookup_env(struct Env *, char *, struct Sexp **);
+int sexp_env_replace(struct Sexp **, struct Env *);
+int s_beta_red(struct Sexp *, struct Env *, struct Sexp **);
+int s_define(struct Sexp *, struct Env **, struct Sexp **);
+int s_lambda(struct Sexp *, struct Env **, struct Sexp **);
+int s_quote(struct Sexp *, struct Env **, struct Sexp **);
+int s_undef(struct Sexp *, struct Env **, struct Sexp **);
+int eval(struct Sexp *, struct Env **, struct Sexp **);
+int parse_eval(char *, struct Env **);
 int repl();
-int main(int argc, char *argv[]);
-
-char flag = 0;
-
-static const struct {
-	char *s;
-	int (*handler)(struct Sexp *s, struct Env **env, struct Sexp **res);
-} handler_map[] = {
-	{"define", s_define},
-	{"lambda", s_lambda},
-	{"quote", s_quote},
-	{"undef", s_undef},
-};
+int main(int, char *);

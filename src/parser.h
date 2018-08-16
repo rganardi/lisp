@@ -17,20 +17,19 @@ struct Sexp {
 	struct Sexp *next;
 };
 
-int match(char c, const char *bytes);
-int tok(char *str, char **start, char **end, char **next, size_t n);
-int read_line(FILE *stream, char *buf, size_t bufsiz);
-size_t append_string(char **dest, const char *src);
-int check_if_sexp(char *str);
-int sexp_end(char *str, char **end, size_t n);
-int parse_sexp(char *str, struct Sexp **tree, size_t n);
-int print_sexp(struct Sexp *s);
-void free_sexp(struct Sexp *s);
-int append_sexp(struct Sexp **dst, struct Sexp *src);
-size_t len_sexp(struct Sexp *s);
-int sexp_cp(struct Sexp *dst, struct Sexp *src);
-int sexp_sub(struct Sexp **orig, struct Sexp *new);
-int sexp_replace_all(struct Sexp **orig, char *name, struct Sexp *new);
+int match(char, const char *);
+int tok(char *, char **, char **, char **, size_t);
+int read_line(FILE *, char *, size_t);
+size_t append_string(char **, const char *);
+int check_if_sexp(char *);
+int sexp_end(char *, char **, size_t);
+int parse_sexp(char *, struct Sexp **, size_t);
+int print_sexp(struct Sexp *);
+void free_sexp(struct Sexp *);
+int append_sexp(struct Sexp **, struct Sexp *);
+size_t len_sexp(struct Sexp *);
+int sexp_cp(struct Sexp *, struct Sexp *);
+int sexp_sub(struct Sexp **, struct Sexp *);
 
 static const struct Sexp s_null = {
 	.type = OBJ_NULL,
